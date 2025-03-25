@@ -1,0 +1,201 @@
+import { db } from "./index";
+import { hash } from "@node-rs/bcrypt";
+import {
+  users,
+  households,
+  householdMembers,
+  categories,
+  templates,
+  templateTasks,
+  templateTaskAssignments,
+} from "./schema";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
+
+async function seedDatabase() {
+  console.log("Seeding database...");
+
+  try {
+    // Create admin user
+    const adminPasswordHash = await hash("admin123", 10);
+    await db
+      .insert(users)
+      .values({
+        username: "admin",
+        passwordHash: adminPasswordHash,
+        firstName: "Admin",
+        lastName: "User",
+        isAdmin: true,
+      });
+
+    // Create regular users
+    const user1PasswordHash = await hash("password123", 10);
+    const [user1] = await db
+      .insert(users)
+      .values({
+        username: "john.doe",
+        passwordHash: user1PasswordHash,
+        firstName: "John",
+        lastName: "Doe",
+        isAdmin: false,
+      })
+      .returning();
+
+    const user2PasswordHash = await hash("password123", 10);
+    const [user2] = await db
+      .insert(users)
+      .values({
+        username: "jane.doe",
+        passwordHash: user2PasswordHash,
+        firstName: "Jane",
+        lastName: "Doe",
+        isAdmin: false,
+      })
+      .returning();
+
+    // Create a household
+    const [doeHousehold] = await db
+      .insert(households)
+      .values({
+        name: "Doe Family",
+      })
+      .returning();
+
+    // Add users to household
+    await db.insert(householdMembers).values([
+      {
+        userId: user1.id,
+        householdId: doeHousehold.id,
+        isOwner: true,
+      },
+      {
+        userId: user2.id,
+        householdId: doeHousehold.id,
+        isOwner: false,
+      },
+    ]);
+
+    // Create some categories
+    const categoriesData = [
+      {
+        householdId: doeHousehold.id,
+        name: "Health",
+        description: "Physical and mental wellbeing activities",
+      },
+      {
+        householdId: doeHousehold.id,
+        name: "Family",
+        description: "Activities related to family connections",
+      },
+      {
+        householdId: doeHousehold.id,
+        name: "Community",
+        description: "Community involvement and volunteering",
+      },
+      {
+        householdId: doeHousehold.id,
+        name: "Home",
+        description: "Home maintenance and improvement",
+      },
+    ];
+
+    const createdCategories = await db.insert(categories).values(categoriesData).returning();
+
+    // Create a template
+    const [monthlyTemplate] = await db
+      .insert(templates)
+      .values({
+        householdId: doeHousehold.id,
+        name: "Monthly Plan",
+        description: "Our standard monthly plan template",
+        isActive: true,
+      })
+      .returning();
+
+    // Create template tasks
+    const templateTasksData = [
+      {
+        templateId: monthlyTemplate.id,
+        categoryId: createdCategories[0].id, // Health
+        name: "Exercise",
+        description: "Go to the gym or workout at home",
+        timesPerMonth: 12,
+        storyPoints: 2,
+        assignToAll: true,
+      },
+      {
+        templateId: monthlyTemplate.id,
+        categoryId: createdCategories[0].id, // Health
+        name: "Meditation",
+        description: "10 minutes of meditation",
+        timesPerMonth: 15,
+        storyPoints: 1,
+        assignToAll: true,
+      },
+      {
+        templateId: monthlyTemplate.id,
+        categoryId: createdCategories[1].id, // Family
+        name: "Family dinner",
+        description: "Prepare and have dinner together as a family",
+        timesPerMonth: 8,
+        storyPoints: 3,
+        assignToAll: true,
+      },
+      {
+        templateId: monthlyTemplate.id,
+        categoryId: createdCategories[1].id, // Family
+        name: "Visit parents",
+        description: "Visit parents or in-laws",
+        timesPerMonth: 2,
+        storyPoints: 5,
+        assignToAll: false,
+      },
+      {
+        templateId: monthlyTemplate.id,
+        categoryId: createdCategories[2].id, // Community
+        name: "Volunteer",
+        description: "Volunteer at local charity or community event",
+        timesPerMonth: 1,
+        storyPoints: 8,
+        assignToAll: false,
+      },
+      {
+        templateId: monthlyTemplate.id,
+        categoryId: createdCategories[3].id, // Home
+        name: "Deep cleaning",
+        description: "Deep cleaning of a room or area",
+        timesPerMonth: 4,
+        storyPoints: 5,
+        assignToAll: true,
+      },
+    ];
+
+    const createdTemplateTasks = await db
+      .insert(templateTasks)
+      .values(templateTasksData)
+      .returning();
+
+    // Assign specific tasks to specific users
+    // Visiting parents assigned to John
+    await db.insert(templateTaskAssignments).values({
+      templateTaskId: createdTemplateTasks[3].id, // Visit parents
+      userId: user1.id,
+    });
+
+    // Volunteering assigned to Jane
+    await db.insert(templateTaskAssignments).values({
+      templateTaskId: createdTemplateTasks[4].id, // Volunteer
+      userId: user2.id,
+    });
+
+    console.log("Database seeded successfully");
+  } catch (error) {
+    console.error("Error seeding database:", error);
+    process.exit(1);
+  }
+}
+
+// Run the seed function
+seedDatabase();
