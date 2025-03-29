@@ -179,7 +179,6 @@ const templateSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   householdId: z.number(),
-  isActive: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -218,16 +217,16 @@ const taskSchema = z.object({
 const monthlyPlanSchema = z.object({
   id: z.number(),
   name: z.string(),
-  description: z.string().nullable(),
   householdId: z.number(),
   month: z.number(),
   year: z.number(),
-  isActive: z.boolean(),
   isClosed: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
+// TODO
+/*
 const categoryStatsSchema = z.object({
   categoryId: z.number(),
   categoryName: z.string(),
@@ -236,7 +235,10 @@ const categoryStatsSchema = z.object({
   totalStoryPoints: z.number(),
   completedStoryPoints: z.number(),
 });
+*/
 
+// TODO
+/*
 const userStatsSchema = z.object({
   userId: z.number(),
   firstName: z.string(),
@@ -246,29 +248,27 @@ const userStatsSchema = z.object({
   totalStoryPoints: z.number(),
   completedStoryPoints: z.number(),
 });
+*/
 
 const planStatsSchema = z.object({
   totalTasks: z.number(),
   completedTasks: z.number(),
   totalStoryPoints: z.number(),
   completedStoryPoints: z.number(),
-  completionRate: z.number(),
-  storyPointCompletionRate: z.number(),
-  categoryStats: z.array(categoryStatsSchema),
-  userStats: z.array(userStatsSchema),
+  // categoryStats: z.array(categoryStatsSchema),
+  // userStats: z.array(userStatsSchema),
   previousMonth: z.object({
     totalTasks: z.number(),
     completedTasks: z.number(),
     totalStoryPoints: z.number(),
     completedStoryPoints: z.number(),
-    completionRate: z.number(),
-    storyPointCompletionRate: z.number(),
   }).nullable(),
 });
 
-const monthlyPlanDetailSchema = monthlyPlanSchema.extend({
+const monthlyPlanDetailSchema = z.object({
   tasks: z.array(taskSchema),
   categories: z.array(categorySchema),
+  plan: monthlyPlanSchema,
   members: z.array(z.object({
     id: z.number(),
     firstName: z.string(),
@@ -548,6 +548,7 @@ const api = {
   // Monthly Plans endpoints
   monthlyPlans: {
     getByHousehold: async (householdId: number): Promise<MonthlyPlanResponse[]> => {
+      console.log('>>>>>>>>>> getByHousehold');
       try {
         const response = await axios.get<{ plans: MonthlyPlanResponse[] }>(`/monthly-plans/household/${householdId}`);
         const validatedData = z.object({ plans: z.array(monthlyPlanSchema) }).parse(response.data);
@@ -558,6 +559,7 @@ const api = {
         }
     },
     getById: async (id: number): Promise<MonthlyPlanDetailResponse> => {
+      console.log('>>>>>>>>>> getById');
         const response = await axios.get<MonthlyPlanDetailResponse>(`/monthly-plans/${id}`);
         const validatedData = monthlyPlanDetailSchema.parse(response.data);
         return validatedData;

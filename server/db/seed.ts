@@ -116,7 +116,6 @@ async function seedDatabase() {
         householdId: doeHousehold.id,
         name: "Monthly Plan",
         description: "Our standard monthly plan template",
-        isActive: true,
       })
       .returning();
 

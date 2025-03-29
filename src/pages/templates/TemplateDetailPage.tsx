@@ -207,9 +207,6 @@ const TemplateDetailPage: FC = () => {
               <p className="text-gray-600 mt-1">{template.description}</p>
             )}
           </div>
-          <span className={`px-3 py-1 rounded-full text-sm ${template.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-            {template.isActive ? 'Active' : 'Inactive'}
-          </span>
         </div>
       </div>
 

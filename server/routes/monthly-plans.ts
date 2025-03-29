@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/consistent-type-definitions */
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { zValidator } from "@hono/zod-validator";
@@ -567,6 +568,38 @@ monthlyPlanRoutes.post(
   },
 );
 
+type SimpleUser = { id: number; firstName: string; lastName: string };
+
+// Get plan members
+async function getPlanMembers(planId: number): Promise<AppResult<SimpleUser[]>> {
+  const planResult = await getPlanById(planId);
+  if (planResult.isErr()) {
+    const error = planResult.error;
+    // return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
+    return err(error);
+  }
+  const plan = planResult.value;
+  const memberIdResult = await getHouseholdMemberIds(plan.householdId);
+  if (memberIdResult.isErr()) {
+    const error = memberIdResult.error;
+    return err(error);
+  }
+  try {
+    const members = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(users)
+      .where(inArray(users.id, memberIdResult.value));
+
+    return ok(members);
+  } catch (error) {
+    return err(createDatabaseQueryError("Failed to fetch plan members", error));
+  }
+}
+
 // Get a specific monthly plan with its tasks
 monthlyPlanRoutes.get("/:id", async (c) => {
   const user = c.get("user");
@@ -635,6 +668,14 @@ monthlyPlanRoutes.get("/:id", async (c) => {
     assignedUsers: assignmentsByTask[task.id] || [],
   }));
 
+  // Get plan members
+  const membersResult = await getPlanMembers(plan.id);
+
+  if (membersResult.isErr()) {
+    const error = membersResult.error;
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+  }
+
   // Get plan statistics
   const statsResult = await getPlanStatistics(planId);
 
@@ -651,11 +692,13 @@ monthlyPlanRoutes.get("/:id", async (c) => {
     return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
+  // FIXME: Better output typechecking
   return c.json({
     plan,
+    members: membersResult.value,
     tasks: tasksWithAssignments,
     categories: categoriesResult.value,
-    stats: statsResult.value
+    stats: {...statsResult.value, previousMonth: null }, // TODO: previousMonth
   }, (200 as ContentfulStatusCode));
 });
 

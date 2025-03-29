@@ -59,7 +59,6 @@ export interface Template {
   name: string;
   description: string | null;
   householdId: number;
-  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }

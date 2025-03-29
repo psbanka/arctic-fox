@@ -70,7 +70,6 @@ export const templates = pgTable("templates", {
     .references(() => households.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
-  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

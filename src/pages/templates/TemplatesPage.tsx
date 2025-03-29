@@ -172,9 +172,6 @@ const TemplatesPage: FC = () => {
                   <span className="text-xs text-gray-500">
                     {new Date(template.createdAt).toLocaleDateString()}
                   </span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${template.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                    {template.isActive ? 'Active' : 'Inactive'}
-                  </span>
                 </div>
               </div>
             ))}

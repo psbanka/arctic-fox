@@ -123,7 +123,7 @@ const MonthlyPlanDetailPage: FC = () => {
 
     // biome-ignore lint/complexity/noForEach: <explanation>
     Object.entries(tasksByCategory).forEach(([categoryId, tasks]) => {
-      const numCategoryId = parseInt(categoryId);
+      const numCategoryId = Number.parseInt(categoryId);
       groupedTasksByCategory[numCategoryId] = {};
 
       // biome-ignore lint/complexity/noForEach: <explanation>
@@ -165,8 +165,10 @@ const MonthlyPlanDetailPage: FC = () => {
     return category ? category.name : 'Unknown';
   };
 
-  // Get category completion data
+  // TODO: Get category completion data
   const getCategoryCompletionData = (categoryId: number) => {
+    return null;
+    /*
     if (!planResult) return null;
     const plan = planResult;
     if (!plan.stats || !plan.stats.categoryStats) return null;
@@ -179,6 +181,7 @@ const MonthlyPlanDetailPage: FC = () => {
       completionRate: categoryStat.totalTasks > 0 ?
         (categoryStat.completedTasks / categoryStat.totalTasks) * 100 : 0
     };
+    */
   };
 
   if (isLoadingPlan) {
@@ -196,8 +199,10 @@ const MonthlyPlanDetailPage: FC = () => {
     );
   }
 
-  const plan = planResult;
+  const plan = planResult.plan;
   const tasksByCategory = getTasksByCategory();
+  const completionRate = planResult.stats.completedTasks / planResult.stats.totalTasks;
+  const storyPointCompletionRate = planResult.stats.completedStoryPoints / planResult.stats.totalStoryPoints;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -262,16 +267,16 @@ const MonthlyPlanDetailPage: FC = () => {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">Task Completion</span>
               <span className="text-sm font-medium">
-                {plan.stats.completionRate.toFixed(0)}%
+                {completionRate.toFixed(0)}%
               </span>
             </div>
             <div className="text-sm text-gray-600">
-              {plan.stats.completedTasks}/{plan.stats.totalTasks} tasks
+              {planResult.stats.completedTasks}/{planResult.stats.totalTasks} tasks
             </div>
             <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-500 transition-all duration-300"
-                style={{ width: `${plan.stats.completionRate}%` }}
+                style={{ width: `${completionRate}%` }}
               />
             </div>
           </div>
@@ -281,16 +286,16 @@ const MonthlyPlanDetailPage: FC = () => {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">Story Point Completion</span>
               <span className="text-sm font-medium">
-                {plan.stats.storyPointCompletionRate.toFixed(0)}%
+                {storyPointCompletionRate.toFixed(0)}%
               </span>
             </div>
             <div className="text-sm text-gray-600">
-              {plan.stats.completedStoryPoints}/{plan.stats.totalStoryPoints} points
+              {planResult.stats.completedStoryPoints}/{planResult.stats.totalStoryPoints} points
             </div>
             <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className="h-full bg-green-500 transition-all duration-300"
-                style={{ width: `${plan.stats.storyPointCompletionRate}%` }}
+                style={{ width: `${storyPointCompletionRate}%` }}
               />
             </div>
           </div>
@@ -300,13 +305,15 @@ const MonthlyPlanDetailPage: FC = () => {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">Categories</span>
               <span className="text-sm font-medium">
-                {plan.categories.length}
+                {planResult.categories.length}
               </span>
             </div>
+            {/* TODO: Get category completion data
             <div className="text-sm text-gray-600 truncate">
-              {plan.stats.categoryStats.map(cat => cat.categoryName).slice(0, 3).join(', ')}
-              {plan.stats.categoryStats.length > 3 && '...'}
+              {planResult.stats.categoryStats.map(cat => cat.categoryName).slice(0, 3).join(', ')}
+              {planResult.stats.categoryStats.length > 3 && '...'}
             </div>
+            */}
           </div>
 
           {/* Members */}
@@ -314,12 +321,12 @@ const MonthlyPlanDetailPage: FC = () => {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">Members</span>
               <span className="text-sm font-medium">
-                {plan.members.length}
+                {planResult.members.length}
               </span>
             </div>
             <div className="text-sm text-gray-600 truncate">
-              {plan.members.map(member => `${member.firstName} ${member.lastName}`).slice(0, 2).join(', ')}
-              {plan.members.length > 2 && '...'}
+              {planResult.members.map(member => `${member.firstName} ${member.lastName}`).slice(0, 2).join(', ')}
+              {planResult.members.length > 2 && '...'}
             </div>
           </div>
         </div>
@@ -328,7 +335,9 @@ const MonthlyPlanDetailPage: FC = () => {
         <div className="mt-6">
           <h3 className="text-sm font-medium text-gray-700 mb-3">Member Progress</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {plan.stats.userStats.map(userStat => {
+            {/*
+            TODO
+            planResult.stats.userStats.map(userStat => {
               const completionRate = userStat.totalTasks > 0 ?
                 (userStat.completedTasks / userStat.totalTasks) * 100 : 0;
               const storyPointRate = userStat.totalStoryPoints > 0 ?
@@ -362,7 +371,7 @@ const MonthlyPlanDetailPage: FC = () => {
                   </div>
                 </div>
               );
-            })}
+            })*/}
           </div>
         </div>
 
@@ -370,7 +379,8 @@ const MonthlyPlanDetailPage: FC = () => {
         <div className="mt-6">
           <h3 className="text-sm font-medium text-gray-700 mb-3">Category Progress</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {plan.stats.categoryStats.map(catStat => {
+            {/* TODO
+            planResult.stats.categoryStats.map(catStat => {
               const completionRate = catStat.totalTasks > 0 ?
                 (catStat.completedTasks / catStat.totalTasks) * 100 : 0;
               const storyPointRate = catStat.totalStoryPoints > 0 ?
@@ -404,7 +414,7 @@ const MonthlyPlanDetailPage: FC = () => {
                   </div>
                 </div>
               );
-            })}
+            })*/}
           </div>
         </div>
       </div>
@@ -423,7 +433,7 @@ const MonthlyPlanDetailPage: FC = () => {
               onChange={(e) => setFilterCategory(e.target.value ? Number.parseInt(e.target.value) : null)}
             >
               <option value="">All Categories</option>
-              {plan.categories.map(category => (
+              {planResult.categories.map(category => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>
@@ -441,7 +451,7 @@ const MonthlyPlanDetailPage: FC = () => {
               onChange={(e) => setFilterAssignee(e.target.value ? Number.parseInt(e.target.value) : null)}
             >
               <option value="">All Assignees</option>
-              {plan.members.map(member => (
+              {planResult.members.map(member => (
                 <option key={member.id} value={member.id}>
                   {member.firstName} {member.lastName}
                 </option>
@@ -468,17 +478,17 @@ const MonthlyPlanDetailPage: FC = () => {
         <h2 className="text-lg font-semibold mb-4">Tasks</h2>
         {Object.entries(tasksByCategory).map(([categoryId, tasksByTitle]) => (
           <div key={categoryId} className="mb-8">
-            <h3 className="text-md font-medium mb-4">{getCategoryName(parseInt(categoryId))}</h3>
+            <h3 className="text-md font-medium mb-4">{getCategoryName(Number.parseInt(categoryId))}</h3>
             {Object.entries(tasksByTitle).map(([title, tasks]) => {
               const firstTask = tasks[0];
               const isCompleted = firstTask.isCompleted;
-              const completionData = getCategoryCompletionData(parseInt(categoryId));
+              const completionData = getCategoryCompletionData(Number.parseInt(categoryId));
 
               return (
                 <div key={title} className="mb-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <button
+                      <button type="button"
                         className={`p-2 rounded-full ${
                           isCompleted ? 'text-green-500' : 'text-gray-400'
                         }`}

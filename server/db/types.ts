@@ -90,7 +90,6 @@ export function mapTemplateModelToTemplate(model: TemplateModel): Template {
     name: model.name,
     description: model.description,
     householdId: model.householdId,
-    isActive: model.isActive,
     createdAt: model.createdAt?.toISOString() || new Date().toISOString(),
     updatedAt: model.updatedAt?.toISOString() || new Date().toISOString(),
   };
@@ -165,7 +164,6 @@ export function createTemplateRequestToNewTemplate(
     name: request.name,
     description: request.description || null,
     householdId: request.householdId,
-    isActive: true,
   };
 }
 
