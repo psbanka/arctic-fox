@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { FC } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -9,7 +10,7 @@ import { PlusCircle, ClipboardList } from 'lucide-react';
 import api from '../../services/api';
 import Button from '../../components/ui/Button';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { Template, Household } from '@shared/types';
+import type { Template, Household } from '@shared/types';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Form validation schema for creating a template
@@ -28,7 +29,7 @@ const createTemplateSchema = z.object({
 
 type CreateTemplateFormData = z.infer<typeof createTemplateSchema>;
 
-const TemplatesPage: React.FC = () => {
+const TemplatesPage: FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();

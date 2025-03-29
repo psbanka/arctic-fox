@@ -20,6 +20,7 @@ import {
   AppResult
 } from "../utils/result";
 import { ok, err } from "neverthrow";
+import { ContentfulStatusCode } from 'hono/utils/http-status';
 
 const householdRoutes = new Hono();
 
@@ -109,7 +110,7 @@ async function getHouseholdById(householdId: number): Promise<AppResult<typeof h
 /**
  * Get a user by ID
  */
-async function getUserById(userId: number): AppResult<User> {
+async function getUserById(userId: number): Promise<AppResult<User>> {
   try {
     const user = await db.query.users.findFirst({
       where: eq(users.id, userId),
@@ -128,23 +129,24 @@ async function getUserById(userId: number): AppResult<User> {
 /**
  * Get user's households
  */
-async function getUserHouseholds(userId: number): AppResult<Household[]> {
+async function getUserHouseholds(userId: number): Promise<AppResult<Household[]>> {
   try {
-    const householdsData = await db
-      .select({
-        id: households.id,
-        name: households.name,
-        createdAt: households.createdAt,
-        updatedAt: households.updatedAt,
-        isOwner: householdMembers.isOwner,
+    const householdsData = await db.query.households
+      .findMany({
+        with: {
+          members: {
+            where: eq(householdMembers.userId, userId),
+          },
+        },
       })
-      .from(households)
-      .innerJoin(
-        householdMembers,
-        and(
-          eq(households.id, householdMembers.householdId),
-          eq(householdMembers.userId, userId)
-        )
+      .then((households) =>
+        households.map((h) => ({
+          id: h.id,
+          name: h.name,
+          createdAt: h.createdAt.toISOString(),
+          updatedAt: h.updatedAt.toISOString(),
+          isOwner: h.members[0]?.isOwner ?? false,
+        }))
       );
 
     return ok(householdsData);
@@ -156,7 +158,7 @@ async function getUserHouseholds(userId: number): AppResult<Household[]> {
 /**
  * Create a new household
  */
-async function createHousehold(name: string): AppResult<typeof households.$inferSelect> {
+async function createHousehold(name: string): Promise<AppResult<typeof households.$inferSelect>> {
   try {
     const householdData: NewHousehold = { name };
 
@@ -174,7 +176,7 @@ async function createHousehold(name: string): AppResult<typeof households.$infer
 /**
  * Add a user as a member to a household
  */
-async function addMemberToHousehold(userId: number, householdId: number, isOwner: boolean): AppResult<boolean> {
+async function addMemberToHousehold(userId: number, householdId: number, isOwner: boolean): Promise<AppResult<boolean>> {
   try {
     const memberData: NewHouseholdMember = {
       userId,
@@ -193,7 +195,7 @@ async function addMemberToHousehold(userId: number, householdId: number, isOwner
 /**
  * Get all members of a household with user info
  */
-async function getHouseholdMembers(householdId: number): AppResult<any[]> {
+async function getHouseholdMembers(householdId: number): Promise<AppResult<any[]>> {
   try {
     const membersData = await db
       .select({
@@ -221,7 +223,7 @@ async function getHouseholdMembers(householdId: number): AppResult<any[]> {
 /**
  * Check if a user is already a member of a household
  */
-async function checkMemberExists(userId: number, householdId: number): AppResult<boolean> {
+async function checkMemberExists(userId: number, householdId: number): Promise<AppResult<boolean>> {
   try {
     const existingMembership = await db.query.householdMembers.findFirst({
       where: and(
@@ -239,7 +241,7 @@ async function checkMemberExists(userId: number, householdId: number): AppResult
 /**
  * Update household name
  */
-async function updateHouseholdName(householdId: number, name: string): AppResult<typeof households.$inferSelect> {
+async function updateHouseholdName(householdId: number, name: string): Promise<AppResult<typeof households.$inferSelect>> {
   try {
     const [updatedHousehold] = await db
       .update(households)
@@ -259,7 +261,7 @@ async function updateHouseholdName(householdId: number, name: string): AppResult
 /**
  * Count household owners
  */
-async function countHouseholdOwners(householdId: number): AppResult<number> {
+async function countHouseholdOwners(householdId: number): Promise<AppResult<number>> {
   try {
     const owners = await db
       .select({ count: householdMembers.userId })
@@ -280,7 +282,7 @@ async function countHouseholdOwners(householdId: number): AppResult<number> {
 /**
  * Remove member from household
  */
-async function removeMemberFromHousehold(userId: number, householdId: number): AppResult<boolean> {
+async function removeMemberFromHousehold(userId: number, householdId: number): Promise<AppResult<boolean>> {
   try {
     await db
       .delete(householdMembers)
@@ -305,21 +307,12 @@ householdRoutes.get("/", async (c) => {
 
   if (householdsResult.isErr()) {
     const error = householdsResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   const householdsData = householdsResult.value;
 
-  // Convert Date objects to ISO strings to match the Household type
-  const userHouseholds = householdsData.map(household => ({
-    id: household.id,
-    name: household.name,
-    createdAt: household.createdAt.toISOString(),
-    updatedAt: household.updatedAt.toISOString(),
-    isOwner: household.isOwner
-  }));
-
-  return c.json(userHouseholds);
+  return c.json(householdsData);
 });
 
 // Create a new household
@@ -335,7 +328,7 @@ householdRoutes.post(
 
     if (householdResult.isErr()) {
       const error = householdResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     const newHousehold = householdResult.value;
@@ -345,7 +338,7 @@ householdRoutes.post(
 
     if (memberResult.isErr()) {
       const error = memberResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     return c.json({ household: newHousehold }, 201);
@@ -359,7 +352,7 @@ householdRoutes.get("/:id", async (c) => {
 
   if (isNaN(householdId)) {
     const error = createInvalidInputError("Invalid household ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Get household details
@@ -367,7 +360,7 @@ householdRoutes.get("/:id", async (c) => {
 
   if (householdResult.isErr()) {
     const error = householdResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
   }
 
   const household = householdResult.value;
@@ -377,7 +370,7 @@ householdRoutes.get("/:id", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   const membership = membershipResult.value;
@@ -387,7 +380,7 @@ householdRoutes.get("/:id", async (c) => {
 
   if (membersResult.isErr()) {
     const error = membersResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   const membersData = membersResult.value;
@@ -425,7 +418,7 @@ householdRoutes.post(
 
     if (isNaN(householdId)) {
       const error = createInvalidInputError("Invalid household ID");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Check if the current user is an owner of this household
@@ -433,7 +426,7 @@ householdRoutes.post(
 
     if (ownershipResult.isErr()) {
       const error = ownershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Check if the user to be added exists
@@ -441,7 +434,7 @@ householdRoutes.post(
 
     if (userToAddResult.isErr()) {
       const error = userToAddResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
     }
 
     const userToAdd = userToAddResult.value;
@@ -451,12 +444,12 @@ householdRoutes.post(
 
     if (memberExistsResult.isErr()) {
       const error = memberExistsResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     if (memberExistsResult.value) {
       const error = createDuplicateRecordError("User is already a member of this household");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Add the user to the household
@@ -464,7 +457,7 @@ householdRoutes.post(
 
     if (addMemberResult.isErr()) {
       const error = addMemberResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     return c.json({
@@ -476,7 +469,7 @@ householdRoutes.post(
         lastName: userToAdd.lastName,
         isOwner,
       },
-    });
+    }, 201);
   },
 );
 
@@ -491,7 +484,7 @@ householdRoutes.put(
 
     if (isNaN(householdId)) {
       const error = createInvalidInputError("Invalid household ID");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Check if the current user is an owner of this household
@@ -499,7 +492,7 @@ householdRoutes.put(
 
     if (ownershipResult.isErr()) {
       const error = ownershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Update the household
@@ -507,7 +500,7 @@ householdRoutes.put(
 
     if (updateResult.isErr()) {
       const error = updateResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     return c.json({ household: updateResult.value });
@@ -522,7 +515,7 @@ householdRoutes.delete("/:householdId/members/:userId", async (c) => {
 
   if (isNaN(householdId) || isNaN(userIdToRemove)) {
     const error = createInvalidInputError("Invalid household ID or user ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Check if the current user is a member of this household
@@ -530,7 +523,7 @@ householdRoutes.delete("/:householdId/members/:userId", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
   }
 
   const membership = membershipResult.value;
@@ -538,7 +531,7 @@ householdRoutes.delete("/:householdId/members/:userId", async (c) => {
   // Allow users to remove themselves, or owners to remove anyone
   if (currentUser.id !== userIdToRemove && !membership.isOwner) {
     const error = createInsufficientPermissionsError("Only household owners can remove other members");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Make sure we're not removing the last owner
@@ -548,7 +541,7 @@ householdRoutes.delete("/:householdId/members/:userId", async (c) => {
 
     if (ownersCountResult.isErr()) {
       const error = ownersCountResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     // If this is the only owner, prevent removal
@@ -556,7 +549,7 @@ householdRoutes.delete("/:householdId/members/:userId", async (c) => {
       const error = createInvalidInputError(
         "Cannot remove the only owner. Promote another member to owner first"
       );
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
   }
 
@@ -565,10 +558,10 @@ householdRoutes.delete("/:householdId/members/:userId", async (c) => {
 
   if (removeResult.isErr()) {
     const error = removeResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
-  return c.json({ message: "Member removed successfully" });
+  return c.json({ message: "Member removed successfully" }, 200);
 });
 
 export default householdRoutes;

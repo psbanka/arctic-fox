@@ -1,17 +1,17 @@
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { db } from "../db";
 import {
-  templates,
-  templateTasks,
-  templateTaskAssignments,
   monthlyPlans,
   tasks,
-  taskAssignments,
   categories,
   householdMembers,
   users,
+  templateTasks,
+  templateTaskAssignments,
+  taskAssignments,
 } from "../db/schema";
 import { eq, and, inArray, desc } from "drizzle-orm";
 import { authenticate } from "../middleware/auth";
@@ -20,7 +20,7 @@ import {
   createRecordNotFoundError,
   createInvalidInputError,
   createInsufficientPermissionsError,
-  AppResult,
+  type AppResult,
   ok,
   err
 } from "../utils/result";
@@ -76,7 +76,7 @@ interface PlanTaskWithCategory {
   name: string;
   description: string | null;
   categoryId: number;
-  categoryName: string;
+  categoryName: string | null;
   storyPoints: number;
   isTemplateTask: boolean;
   isCompleted: boolean;
@@ -92,14 +92,6 @@ interface TaskAssignment {
   userId: number;
   firstName: string;
   lastName: string;
-}
-
-interface TaskWithAssignments extends PlanTaskWithCategory {
-  assignedUsers: {
-    userId: number;
-    firstName: string;
-    lastName: string;
-  }[];
 }
 
 interface PlanStatistics {
@@ -259,7 +251,10 @@ async function getPlanTasks(planId: number): Promise<AppResult<PlanTaskWithCateg
       )
       .where(eq(tasks.monthlyPlanId, planId));
 
-    return ok(tasksList);
+    return ok(tasksList.map(task => ({
+      ...task,
+      categoryName: task.categoryName || 'Uncategorized'
+    })));
   } catch (error) {
     return err(createDatabaseQueryError("Failed to fetch plan tasks", error));
   }
@@ -454,11 +449,11 @@ async function getPlanStatistics(planId: number): Promise<AppResult<PlanStatisti
 // Get monthly plans for a household
 monthlyPlanRoutes.get("/household/:householdId", async (c) => {
   const user = c.get("user");
-  const householdId = parseInt(c.req.param("householdId"));
+  const householdId = Number.parseInt(c.req.param("householdId"));
 
-  if (isNaN(householdId)) {
+  if (Number.isNaN(householdId)) {
     const error = createInvalidInputError("Invalid household ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Verify user is a member of this household
@@ -466,7 +461,7 @@ monthlyPlanRoutes.get("/household/:householdId", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Get monthly plans for this household
@@ -474,7 +469,7 @@ monthlyPlanRoutes.get("/household/:householdId", async (c) => {
 
   if (plansResult.isErr()) {
     const error = plansResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   return c.json({ plans: plansResult.value });
@@ -493,7 +488,7 @@ monthlyPlanRoutes.post(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Check if a plan for this month and year already exists
@@ -501,12 +496,12 @@ monthlyPlanRoutes.post(
 
     if (planExistsResult.isErr()) {
       const error = planExistsResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     if (planExistsResult.value) {
       const error = createInvalidInputError("A plan for this month and year already exists");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Create the monthly plan
@@ -514,7 +509,7 @@ monthlyPlanRoutes.post(
 
     if (planResult.isErr()) {
       const error = planResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     const newPlan = planResult.value;
@@ -526,7 +521,7 @@ monthlyPlanRoutes.post(
 
       if (templateTasksResult.isErr()) {
         const error = templateTasksResult.error;
-        return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+        return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
       }
 
       const templateTasks = templateTasksResult.value;
@@ -536,7 +531,7 @@ monthlyPlanRoutes.post(
 
       if (memberIdsResult.isErr()) {
         const error = memberIdsResult.error;
-        return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+        return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
       }
 
       const allMemberIds = memberIdsResult.value;
@@ -547,7 +542,7 @@ monthlyPlanRoutes.post(
 
         if (taskResult.isErr()) {
           const error = taskResult.error;
-          return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+          return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
         }
 
         const newTask = taskResult.value;
@@ -562,24 +557,24 @@ monthlyPlanRoutes.post(
 
           if (assignmentsResult.isErr()) {
             const error = assignmentsResult.error;
-            return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+            return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
           }
         }
       }
     }
 
-    return c.json({ plan: newPlan }, 201);
+    return c.json({ plan: newPlan }, (201 as ContentfulStatusCode));
   },
 );
 
 // Get a specific monthly plan with its tasks
 monthlyPlanRoutes.get("/:id", async (c) => {
   const user = c.get("user");
-  const planId = parseInt(c.req.param("id"));
+  const planId = Number.parseInt(c.req.param("id"));
 
-  if (isNaN(planId)) {
+  if (Number.isNaN(planId)) {
     const error = createInvalidInputError("Invalid plan ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Get the plan
@@ -587,7 +582,7 @@ monthlyPlanRoutes.get("/:id", async (c) => {
 
   if (planResult.isErr()) {
     const error = planResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
   }
 
   const plan = planResult.value;
@@ -597,7 +592,7 @@ monthlyPlanRoutes.get("/:id", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Get tasks for this plan
@@ -605,7 +600,7 @@ monthlyPlanRoutes.get("/:id", async (c) => {
 
   if (tasksResult.isErr()) {
     const error = tasksResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   const tasksList = tasksResult.value;
@@ -616,7 +611,7 @@ monthlyPlanRoutes.get("/:id", async (c) => {
 
   if (assignmentsResult.isErr()) {
     const error = assignmentsResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   const assignments = assignmentsResult.value;
@@ -645,7 +640,7 @@ monthlyPlanRoutes.get("/:id", async (c) => {
 
   if (statsResult.isErr()) {
     const error = statsResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   // Get household categories for reference
@@ -653,7 +648,7 @@ monthlyPlanRoutes.get("/:id", async (c) => {
 
   if (categoriesResult.isErr()) {
     const error = categoriesResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   return c.json({
@@ -661,7 +656,7 @@ monthlyPlanRoutes.get("/:id", async (c) => {
     tasks: tasksWithAssignments,
     categories: categoriesResult.value,
     stats: statsResult.value
-  });
+  }, (200 as ContentfulStatusCode));
 });
 
 // Update task completion status
@@ -713,12 +708,12 @@ monthlyPlanRoutes.put(
   zValidator("json", completeTaskSchema),
   async (c) => {
     const user = c.get("user");
-    const taskId = parseInt(c.req.param("taskId"));
+    const taskId = Number.parseInt(c.req.param("taskId"));
     const { isCompleted } = await c.req.valid("json");
 
-    if (isNaN(taskId)) {
+    if (Number.isNaN(taskId)) {
       const error = createInvalidInputError("Invalid task ID");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Get the task
@@ -726,7 +721,7 @@ monthlyPlanRoutes.put(
 
     if (taskResult.isErr()) {
       const error = taskResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
     }
 
     const task = taskResult.value;
@@ -736,7 +731,7 @@ monthlyPlanRoutes.put(
 
     if (planResult.isErr()) {
       const error = planResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
     }
 
     const plan = planResult.value;
@@ -746,13 +741,13 @@ monthlyPlanRoutes.put(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Check if the plan is closed
     if (plan.isClosed) {
       const error = createInvalidInputError("Cannot update tasks in a closed plan");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Update the task completion status
@@ -764,10 +759,10 @@ monthlyPlanRoutes.put(
 
     if (updateResult.isErr()) {
       const error = updateResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
-    return c.json({ task: updateResult.value });
+    return c.json({ task: updateResult.value }, (200 as ContentfulStatusCode));
   }
 );
 
@@ -777,7 +772,7 @@ monthlyPlanRoutes.post(
   zValidator("json", createTaskSchema),
   async (c) => {
     const user = c.get("user");
-    const planId = parseInt(c.req.param("id"));
+    const planId = Number.parseInt(c.req.param("id"));
     const {
       categoryId,
       name,
@@ -787,9 +782,9 @@ monthlyPlanRoutes.post(
       dueDate,
     } = await c.req.valid("json");
 
-    if (isNaN(planId)) {
+    if (Number.isNaN(planId)) {
       const error = createInvalidInputError("Invalid plan ID");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Get the plan
@@ -797,7 +792,7 @@ monthlyPlanRoutes.post(
 
     if (planResult.isErr()) {
       const error = planResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
     }
 
     const plan = planResult.value;
@@ -807,13 +802,13 @@ monthlyPlanRoutes.post(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Check if the plan is closed
     if (plan.isClosed) {
       const error = createInvalidInputError("Cannot add tasks to a closed plan");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Create the task
@@ -837,14 +832,14 @@ monthlyPlanRoutes.post(
 
         if (assignmentsResult.isErr()) {
           const error = assignmentsResult.error;
-          return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+          return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
         }
       }
 
-      return c.json({ task: newTask }, 201);
+      return c.json({ task: newTask }, (201 as ContentfulStatusCode));
     } catch (error) {
       const dbError = createDatabaseQueryError("Failed to create task", error);
-      return c.json({ message: dbError.message, type: dbError.type }, dbError.statusCode || 500);
+      return c.json({ message: dbError.message, type: dbError.type }, (dbError.statusCode || 500) as ContentfulStatusCode);
     }
   }
 );
@@ -852,12 +847,12 @@ monthlyPlanRoutes.post(
 // Close/reopen a monthly plan
 monthlyPlanRoutes.put("/:id/status", async (c) => {
   const user = c.get("user");
-  const planId = parseInt(c.req.param("id"));
+  const planId = Number.parseInt(c.req.param("id"));
   const { isClosed } = await c.req.json<{ isClosed: boolean }>();
 
-  if (isNaN(planId)) {
+  if (Number.isNaN(planId)) {
     const error = createInvalidInputError("Invalid plan ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Get the plan
@@ -865,7 +860,7 @@ monthlyPlanRoutes.put("/:id/status", async (c) => {
 
   if (planResult.isErr()) {
     const error = planResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
   }
 
   const plan = planResult.value;
@@ -875,7 +870,7 @@ monthlyPlanRoutes.put("/:id/status", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Update the plan status
@@ -889,10 +884,10 @@ monthlyPlanRoutes.put("/:id/status", async (c) => {
       .where(eq(monthlyPlans.id, planId))
       .returning();
 
-    return c.json({ plan: updatedPlan });
+    return c.json({ plan: updatedPlan }, (200 as ContentfulStatusCode));
   } catch (error) {
     const dbError = createDatabaseQueryError("Failed to update plan status", error);
-    return c.json({ message: dbError.message, type: dbError.type }, dbError.statusCode || 500);
+    return c.json({ message: dbError.message, type: dbError.type }, (dbError.statusCode || 500) as ContentfulStatusCode);
   }
 });
 

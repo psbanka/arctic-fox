@@ -1,5 +1,6 @@
 import { hash, compare } from '@node-rs/bcrypt';
 import jwt from "jsonwebtoken";
+import type { SignOptions } from "jsonwebtoken";
 import dotenv from "dotenv";
 import {
   createAuthenticationError,
@@ -15,7 +16,6 @@ dotenv.config();
 
 // Get JWT secret from environment variables
 const jwtSecret = process.env.JWT_SECRET || "";
-const jwtExpiry = process.env.JWT_EXPIRY || "7d";
 
 if (!jwtSecret) {
   throw new Error("JWT_SECRET is not defined");
@@ -32,13 +32,14 @@ export interface JwtUser {
 
 // Function to generate JWT token
 export function generateToken(user: JwtUser): string {
-  return jwt.sign(user, jwtSecret, { expiresIn: jwtExpiry });
+  const options: SignOptions = { expiresIn: 7 * 24 * 60 * 60 }; // 7 days in seconds
+  return jwt.sign(user, Buffer.from(jwtSecret), options);
 }
 
 // Function to verify JWT token
 export function verifyToken(token: string): AppResult<JwtUser> {
   try {
-    const decoded = jwt.verify(token, jwtSecret);
+    const decoded = jwt.verify(token, Buffer.from(jwtSecret));
     return ok(decoded as JwtUser);
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
@@ -50,7 +51,7 @@ export function verifyToken(token: string): AppResult<JwtUser> {
 }
 
 // Function to hash password
-export async function hashPassword(password: string): AppResult<string> {
+export async function hashPassword(password: string): Promise<AppResult<string>> {
   try {
     const saltRounds = 10;
     const hashedPassword = await hash(password, saltRounds);
@@ -64,7 +65,7 @@ export async function hashPassword(password: string): AppResult<string> {
 export async function comparePassword(
   password: string,
   hash: string,
-): AppResult<boolean> {
+): Promise<AppResult<boolean>> {
   try {
     const isMatch = await compare(password, hash);
     return ok(isMatch);

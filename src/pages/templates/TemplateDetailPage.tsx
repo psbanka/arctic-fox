@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import type { FC } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm, Controller } from 'react-hook-form';
@@ -17,7 +18,7 @@ import {
 import api from '../../services/api';
 import Button from '../../components/ui/Button';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import {
+import type {
   TemplateTask,
   Category
 } from '@shared/types';
@@ -48,7 +49,7 @@ const createTaskSchema = z.object({
 
 type CreateTaskFormData = z.infer<typeof createTaskSchema>;
 
-const TemplateDetailPage: React.FC = () => {
+const TemplateDetailPage: FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -99,13 +100,13 @@ const TemplateDetailPage: React.FC = () => {
         // Update existing task - ensure description is a string or undefined, never null
         return api.templates.updateTask(editingTask.id, {
           ...data,
-          description: data.description === null ? undefined : data.description
+          description: data.description || "",
         });
       } else {
         // Create new task - ensure description is a string or undefined, never null
         return api.templates.addTask(templateId, {
           ...data,
-          description: data.description === null ? undefined : data.description
+          description: data.description ?? "",
         });
       }
     },

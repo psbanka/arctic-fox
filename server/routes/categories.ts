@@ -13,6 +13,7 @@ import {
   AppResult
 } from "../utils/result";
 import { ok, err } from "neverthrow";
+import { ContentfulStatusCode } from 'hono/utils/http-status';
 
 const categoryRoutes = new Hono();
 
@@ -166,7 +167,7 @@ categoryRoutes.get("/household/:householdId", async (c) => {
 
   if (isNaN(householdId)) {
     const error = createInvalidInputError("Invalid household ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Verify user is a member of this household
@@ -174,7 +175,7 @@ categoryRoutes.get("/household/:householdId", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Get categories for this household
@@ -182,7 +183,7 @@ categoryRoutes.get("/household/:householdId", async (c) => {
 
   if (categoriesResult.isErr()) {
     const error = categoriesResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   return c.json({ categories: categoriesResult.value });
@@ -201,7 +202,7 @@ categoryRoutes.post(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Create the category
@@ -209,7 +210,7 @@ categoryRoutes.post(
 
     if (categoryResult.isErr()) {
       const error = categoryResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     return c.json({ category: categoryResult.value }, 201);
@@ -227,7 +228,7 @@ categoryRoutes.put(
 
     if (isNaN(categoryId)) {
       const error = createInvalidInputError("Invalid category ID");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Get the category
@@ -235,7 +236,7 @@ categoryRoutes.put(
 
     if (categoryResult.isErr()) {
       const error = categoryResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
     }
 
     const category = categoryResult.value;
@@ -245,7 +246,7 @@ categoryRoutes.put(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Update the category
@@ -253,7 +254,7 @@ categoryRoutes.put(
 
     if (updateResult.isErr()) {
       const error = updateResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     return c.json({ category: updateResult.value });
@@ -267,7 +268,7 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (isNaN(categoryId)) {
     const error = createInvalidInputError("Invalid category ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Get the category
@@ -275,7 +276,7 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (categoryResult.isErr()) {
     const error = categoryResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
   }
 
   const category = categoryResult.value;
@@ -285,7 +286,7 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Check if this category has any tasks
@@ -293,14 +294,14 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (hasTasksResult.isErr()) {
     const error = hasTasksResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   if (hasTasksResult.value) {
     const error = createInvalidInputError(
       "Cannot delete this category because it has tasks associated with it. Please reassign or delete those tasks first."
     );
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Delete the category
@@ -308,7 +309,7 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (deleteResult.isErr()) {
     const error = deleteResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   return c.json({ message: "Category deleted successfully" });

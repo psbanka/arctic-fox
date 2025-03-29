@@ -20,7 +20,7 @@ async function seedDatabase() {
   try {
     // Create admin user
     const adminPasswordHash = await hash("admin123", 10);
-    await db
+    const [ adminUser ] = await db
       .insert(users)
       .values({
         username: "admin",
@@ -28,7 +28,8 @@ async function seedDatabase() {
         firstName: "Admin",
         lastName: "User",
         isAdmin: true,
-      });
+      })
+      .returning();
 
     // Create regular users
     const user1PasswordHash = await hash("password123", 10);
@@ -74,6 +75,11 @@ async function seedDatabase() {
         userId: user2.id,
         householdId: doeHousehold.id,
         isOwner: false,
+      },
+      {
+        userId: adminUser.id,
+        householdId: doeHousehold.id,
+        isOwner: true,
       },
     ]);
 

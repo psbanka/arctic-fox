@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "start": "bun run dist/server/index.js",
+    "typecheck": "tsc -b",
     "preview": "vite preview"
   },
   "dependencies": {

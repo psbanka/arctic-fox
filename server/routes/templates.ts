@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { db } from "../db";
@@ -17,7 +18,7 @@ import {
   createRecordNotFoundError,
   createInvalidInputError,
   createInsufficientPermissionsError,
-  AppResult,
+  type AppResult,
   ok,
   err
 } from "../utils/result";
@@ -219,7 +220,13 @@ async function getTemplateTasks(templateId: number): Promise<AppResult<TemplateT
       )
       .where(eq(templateTasks.templateId, templateId));
 
-    return ok(tasks);
+    // Ensure categoryName is never null
+    const tasksWithNonNullCategoryName = tasks.map(task => ({
+      ...task,
+      categoryName: task.categoryName || 'Uncategorized'
+    }));
+
+    return ok(tasksWithNonNullCategoryName);
   } catch (error) {
     return err(createDatabaseQueryError("Failed to fetch template tasks", error));
   }
@@ -429,11 +436,11 @@ async function deleteTemplateTask(taskId: number): Promise<AppResult<boolean>> {
 // Get templates for a household
 templateRoutes.get("/household/:householdId", async (c) => {
   const user = c.get("user");
-  const householdId = parseInt(c.req.param("householdId"));
+  const householdId = Number.parseInt(c.req.param("householdId"));
 
-  if (isNaN(householdId)) {
+  if (Number.isNaN(householdId)) {
     const error = createInvalidInputError("Invalid household ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Verify user is a member of this household
@@ -441,15 +448,16 @@ templateRoutes.get("/household/:householdId", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Get templates for this household
   const templatesResult = await getHouseholdTemplates(householdId);
+  console.log('>>>>>>>>>> templatesResult', templatesResult);
 
   if (templatesResult.isErr()) {
     const error = templatesResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   return c.json({ templates: templatesResult.value });
@@ -468,7 +476,7 @@ templateRoutes.post(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Create the template
@@ -476,7 +484,7 @@ templateRoutes.post(
 
     if (templateResult.isErr()) {
       const error = templateResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     return c.json({ template: templateResult.value }, 201);
@@ -486,11 +494,11 @@ templateRoutes.post(
 // Get a specific template with its tasks
 templateRoutes.get("/:id", async (c) => {
   const user = c.get("user");
-  const templateId = parseInt(c.req.param("id"));
+  const templateId = Number.parseInt(c.req.param("id"));
 
-  if (isNaN(templateId)) {
+  if (Number.isNaN(templateId)) {
     const error = createInvalidInputError("Invalid template ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Get the template
@@ -498,7 +506,7 @@ templateRoutes.get("/:id", async (c) => {
 
   if (templateResult.isErr()) {
     const error = templateResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
   }
 
   const template = templateResult.value;
@@ -508,7 +516,7 @@ templateRoutes.get("/:id", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Get template tasks
@@ -516,7 +524,7 @@ templateRoutes.get("/:id", async (c) => {
 
   if (tasksResult.isErr()) {
     const error = tasksResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   const tasks = tasksResult.value;
@@ -528,7 +536,7 @@ templateRoutes.get("/:id", async (c) => {
 
   if (assignmentsResult.isErr()) {
     const error = assignmentsResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   const assignments = assignmentsResult.value;
@@ -557,7 +565,7 @@ templateRoutes.get("/:id", async (c) => {
 
   if (categoriesResult.isErr()) {
     const error = categoriesResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   // Get household members for reference
@@ -565,7 +573,7 @@ templateRoutes.get("/:id", async (c) => {
 
   if (membersResult.isErr()) {
     const error = membersResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   return c.json({
@@ -582,7 +590,7 @@ templateRoutes.post(
   zValidator("json", createTemplateTaskSchema),
   async (c) => {
     const user = c.get("user");
-    const templateId = parseInt(c.req.param("id"));
+    const templateId = Number.parseInt(c.req.param("id"));
     const {
       name,
       description,
@@ -593,9 +601,9 @@ templateRoutes.post(
       assignedUserIds = [],
     } = await c.req.valid("json");
 
-    if (isNaN(templateId)) {
+    if (Number.isNaN(templateId)) {
       const error = createInvalidInputError("Invalid template ID");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Get the template
@@ -603,7 +611,7 @@ templateRoutes.post(
 
     if (templateResult.isErr()) {
       const error = templateResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
     }
 
     const template = templateResult.value;
@@ -613,7 +621,7 @@ templateRoutes.post(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Verify the category belongs to this household
@@ -621,7 +629,7 @@ templateRoutes.post(
 
     if (categoryResult.isErr()) {
       const error = categoryResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     const category = categoryResult.value;
@@ -639,7 +647,7 @@ templateRoutes.post(
 
     if (taskResult.isErr()) {
       const error = taskResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     const newTask = taskResult.value;
@@ -651,7 +659,7 @@ templateRoutes.post(
 
       if (memberIdsResult.isErr()) {
         const error = memberIdsResult.error;
-        return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+        return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
       }
 
       const validMemberIds = new Set(memberIdsResult.value);
@@ -663,7 +671,7 @@ templateRoutes.post(
 
         if (assignmentsResult.isErr()) {
           const error = assignmentsResult.error;
-          return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+          return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
         }
       }
     }
@@ -684,7 +692,7 @@ templateRoutes.put(
   zValidator("json", createTemplateTaskSchema),
   async (c) => {
     const user = c.get("user");
-    const taskId = parseInt(c.req.param("taskId"));
+    const taskId = Number.parseInt(c.req.param("taskId"));
     const {
       name,
       description,
@@ -695,9 +703,9 @@ templateRoutes.put(
       assignedUserIds = [],
     } = await c.req.valid("json");
 
-    if (isNaN(taskId)) {
+    if (Number.isNaN(taskId)) {
       const error = createInvalidInputError("Invalid task ID");
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     // Get the task
@@ -705,7 +713,7 @@ templateRoutes.put(
 
     if (taskResult.isErr()) {
       const error = taskResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
     }
 
     const task = taskResult.value;
@@ -715,7 +723,7 @@ templateRoutes.put(
 
     if (templateResult.isErr()) {
       const error = templateResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
     }
 
     const template = templateResult.value;
@@ -725,7 +733,7 @@ templateRoutes.put(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
     }
 
     // Verify the category belongs to this household
@@ -733,7 +741,7 @@ templateRoutes.put(
 
     if (categoryResult.isErr()) {
       const error = categoryResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
     const category = categoryResult.value;
@@ -751,7 +759,7 @@ templateRoutes.put(
 
     if (updateResult.isErr()) {
       const error = updateResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     const updatedTask = updateResult.value;
@@ -761,7 +769,7 @@ templateRoutes.put(
 
     if (deleteResult.isErr()) {
       const error = deleteResult.error;
-      return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
     // If not assigned to all, create new assignments for specific users
@@ -771,7 +779,7 @@ templateRoutes.put(
 
       if (memberIdsResult.isErr()) {
         const error = memberIdsResult.error;
-        return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+        return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
       }
 
       const validMemberIds = new Set(memberIdsResult.value);
@@ -783,7 +791,7 @@ templateRoutes.put(
 
         if (assignmentsResult.isErr()) {
           const error = assignmentsResult.error;
-          return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+          return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
         }
       }
     }
@@ -800,11 +808,11 @@ templateRoutes.put(
 // Delete a template task
 templateRoutes.delete("/tasks/:taskId", async (c) => {
   const user = c.get("user");
-  const taskId = parseInt(c.req.param("taskId"));
+  const taskId = Number.parseInt(c.req.param("taskId"));
 
-  if (isNaN(taskId)) {
+  if (Number.isNaN(taskId)) {
     const error = createInvalidInputError("Invalid task ID");
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 400);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
 
   // Get the task
@@ -812,7 +820,7 @@ templateRoutes.delete("/tasks/:taskId", async (c) => {
 
   if (taskResult.isErr()) {
     const error = taskResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
   }
 
   const task = taskResult.value;
@@ -822,7 +830,7 @@ templateRoutes.delete("/tasks/:taskId", async (c) => {
 
   if (templateResult.isErr()) {
     const error = templateResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 404);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
   }
 
   const template = templateResult.value;
@@ -832,7 +840,7 @@ templateRoutes.delete("/tasks/:taskId", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 403);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
   }
 
   // Delete the task (assignments will cascade)
@@ -840,7 +848,7 @@ templateRoutes.delete("/tasks/:taskId", async (c) => {
 
   if (deleteResult.isErr()) {
     const error = deleteResult.error;
-    return c.json({ message: error.message, type: error.type }, error.statusCode || 500);
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
   return c.json({ message: "Task deleted successfully" });

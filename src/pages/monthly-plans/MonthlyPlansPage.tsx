@@ -1,33 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import { type FC, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { toast } from 'react-hot-toast';
 import { PlusCircle, CheckCircle2, CalendarCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../../services/api';
 import Button from '../../components/ui/Button';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { MonthlyPlan, Template } from '@shared/types';
+import CreateMonthlyPlanForm, { type CreateMonthlyPlanFormData } from '../../components/monthly-plans/CreateMonthlyPlanForm';
+import type { MonthlyPlan } from '@shared/types';
 import { useAuth } from '../../contexts/AuthContext';
 
-// Form validation schema for creating a monthly plan
-const createMonthlyPlanSchema = z.object({
-  name: z
-    .string()
-    .min(3, 'Name must be at least 3 characters')
-    .max(100, 'Name must be less than 100 characters'),
-  month: z.number().min(1).max(12),
-  year: z.number().min(2000).max(2100),
-  householdId: z.number().positive('Please select a household'),
-  templateId: z.number().positive('Please select a template'),
-});
-
-type CreateMonthlyPlanFormData = z.infer<typeof createMonthlyPlanSchema>;
-
-const MonthlyPlansPage: React.FC = () => {
+const MonthlyPlansPage: FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -36,37 +20,12 @@ const MonthlyPlansPage: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
-  // Form setup
-  const {
-    register,
-    handleSubmit,
-    reset,
-    setValue,
-    formState: { errors },
-  } = useForm<CreateMonthlyPlanFormData>({
-    resolver: zodResolver(createMonthlyPlanSchema),
-    defaultValues: {
-      name: `${format(new Date(selectedYear, selectedMonth - 1), 'MMMM yyyy')} Plan`,
-      month: selectedMonth,
-      year: selectedYear,
-      householdId: 0,
-      templateId: 0,
-    },
-  });
-
   // Set the default household ID when the user data is available
   useEffect(() => {
     if (user && !user.isAdmin && user.defaultHouseholdId) {
       setSelectedHouseholdId(user.defaultHouseholdId);
     }
   }, [user]);
-
-  // Update form when selected month/year changes
-  useEffect(() => {
-    setValue('name', `${format(new Date(selectedYear, selectedMonth - 1), 'MMMM yyyy')} Plan`);
-    setValue('month', selectedMonth);
-    setValue('year', selectedYear);
-  }, [selectedMonth, selectedYear, setValue]);
 
   // Fetch households (only needed for admin users)
   const { data: households, isLoading: isLoadingHouseholds } = useQuery({
@@ -75,16 +34,25 @@ const MonthlyPlansPage: React.FC = () => {
     enabled: user?.isAdmin || false,
   });
 
+
+  const queryFunction = () => selectedHouseholdId
+    ? api.monthlyPlans.getByHousehold(selectedHouseholdId)
+    : []
+
+  console.log('>>>>>>>>>> selectedHouseholdId', selectedHouseholdId);
   // Fetch monthly plans based on selected household
   const {
     data: monthlyPlans,
     isLoading: isLoadingPlans,
   } = useQuery({
     queryKey: ['monthlyPlans', selectedHouseholdId],
+    queryFn: queryFunction,
+    /*
     queryFn: () =>
       selectedHouseholdId
         ? api.monthlyPlans.getByHousehold(selectedHouseholdId)
         : Promise.resolve([]),
+        */
     enabled: !!selectedHouseholdId,
   });
 
@@ -101,46 +69,48 @@ const MonthlyPlansPage: React.FC = () => {
     enabled: !!selectedHouseholdId,
   });
 
+  // We are working in here.
   // Create monthly plan mutation
   const createMonthlyPlanMutation = useMutation({
-    mutationFn: (data: CreateMonthlyPlanFormData) => api.monthlyPlans.create(data),
+    mutationFn: (data: CreateMonthlyPlanFormData) => {
+      debugger;
+      return api.monthlyPlans.create(data);
+    },
     onSuccess: (newPlan) => {
+      debugger;
       toast.success('Monthly plan created successfully!');
       setIsModalOpen(false);
-      reset();
       queryClient.invalidateQueries({ queryKey: ['monthlyPlans', selectedHouseholdId] });
       // Navigate to the new plan
       navigate(`/monthly-plans/${newPlan.id}`);
     },
     onError: (error) => {
+      debugger;
       toast.error('Failed to create monthly plan');
       console.error('Create monthly plan error:', error);
     },
   });
 
   const handleCreateMonthlyPlan = (data: CreateMonthlyPlanFormData) => {
+    debugger;
     createMonthlyPlanMutation.mutate(data);
   };
 
   const handleSelectHousehold = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = parseInt(event.target.value);
+    const id = Number.parseInt(event.target.value, 10);
     setSelectedHouseholdId(id || null);
   };
 
   const openCreateModal = () => {
-    // Pre-select the user's default household if they're not an admin
-    if (user && !user.isAdmin && user.defaultHouseholdId) {
-      setValue('householdId', user.defaultHouseholdId);
-    }
     setIsModalOpen(true);
   };
 
-  const handleMonthChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedMonth(parseInt(event.target.value));
+  const handleMonthChange = (month: number) => {
+    setSelectedMonth(month);
   };
 
-  const handleYearChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedYear(parseInt(event.target.value));
+  const handleYearChange = (year: number) => {
+    setSelectedYear(year);
   };
 
   // Group plans by year and month
@@ -171,6 +141,11 @@ const MonthlyPlansPage: React.FC = () => {
         <Button
           onClick={openCreateModal}
           className="flex items-center"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              openCreateModal();
+            }
+          }}
         >
           <PlusCircle className="mr-2 h-4 w-4" />
           New Monthly Plan
@@ -209,10 +184,10 @@ const MonthlyPlansPage: React.FC = () => {
               <div key={year} className="border rounded-lg p-4">
                 <h2 className="text-xl font-semibold mb-4">{year}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {Object.entries(groupedPlans[year]).sort((a, b) => Number(b[0]) - Number(a[0])).map(([month, plans]) => (
+                  {Object.entries(groupedPlans[year]).sort((a, b) => Number.parseInt(b[0], 10) - Number.parseInt(a[0], 10)).map(([month, plans]) => (
                     <div key={`${year}-${month}`} className="border rounded-lg p-4">
                       <h3 className="text-lg font-medium mb-3">
-                        {format(new Date(year, parseInt(month) - 1), 'MMMM')}
+                        {format(new Date(year, Number.parseInt(month, 10) - 1), 'MMMM')}
                       </h3>
                       <div className="space-y-2">
                         {plans.map(plan => (
@@ -222,6 +197,13 @@ const MonthlyPlansPage: React.FC = () => {
                               plan.isClosed ? 'bg-gray-100' : 'bg-blue-50 hover:bg-blue-100'
                             }`}
                             onClick={() => navigate(`/monthly-plans/${plan.id}`)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                navigate(`/monthly-plans/${plan.id}`);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
                           >
                             <div className="flex justify-between items-center">
                               <span className="font-medium">{plan.name}</span>
@@ -270,154 +252,20 @@ const MonthlyPlansPage: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Create New Monthly Plan</h2>
-            <form onSubmit={handleSubmit(handleCreateMonthlyPlan)}>
-              {/* Household select - only show for admin users */}
-              {user?.isAdmin ? (
-                <div className="mb-4">
-                  <label htmlFor="householdId" className="block text-sm font-medium mb-1">
-                    Household
-                  </label>
-                  <select
-                    id="householdId"
-                    {...register('householdId', { valueAsNumber: true })}
-                    className="w-full p-2 border rounded-md"
-                    defaultValue={selectedHouseholdId || ''}
-                  >
-                    <option value="">Select a household</option>
-                    {households?.map((household) => (
-                      <option key={household.id} value={household.id}>
-                        {household.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.householdId && (
-                    <p className="text-red-500 text-xs mt-1">{errors.householdId.message}</p>
-                  )}
-                </div>
-              ) : (
-                <input
-                  type="hidden"
-                  {...register('householdId', { valueAsNumber: true })}
-                />
-              )}
-
-              {/* Template select */}
-              {isLoadingTemplates ? (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-1">Template</label>
-                  <div className="flex items-center p-2 border rounded-md">
-                    <div className="w-5 h-5 mr-2">
-                      <LoadingSpinner />
-                    </div>
-                    <span className="text-gray-500">Loading templates...</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="mb-4">
-                  <label htmlFor="templateId" className="block text-sm font-medium mb-1">
-                    Template
-                  </label>
-                  <select
-                    id="templateId"
-                    {...register('templateId', { valueAsNumber: true })}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="">Select a template</option>
-                    {templates?.map((template: Template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.templateId && (
-                    <p className="text-red-500 text-xs mt-1">{errors.templateId.message}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Month and Year */}
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label htmlFor="month" className="block text-sm font-medium mb-1">
-                    Month
-                  </label>
-                  <select
-                    id="month"
-                    {...register('month', { valueAsNumber: true })}
-                    className="w-full p-2 border rounded-md"
-                    value={selectedMonth}
-                    onChange={handleMonthChange}
-                  >
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
-                      <option key={month} value={month}>
-                        {format(new Date(2000, month - 1), 'MMMM')}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.month && (
-                    <p className="text-red-500 text-xs mt-1">{errors.month.message}</p>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor="year" className="block text-sm font-medium mb-1">
-                    Year
-                  </label>
-                  <select
-                    id="year"
-                    {...register('year', { valueAsNumber: true })}
-                    className="w-full p-2 border rounded-md"
-                    value={selectedYear}
-                    onChange={handleYearChange}
-                  >
-                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i).map(year => (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.year && (
-                    <p className="text-red-500 text-xs mt-1">{errors.year.message}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Name input */}
-              <div className="mb-4">
-                <label htmlFor="name" className="block text-sm font-medium mb-1">
-                  Plan Name
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  {...register('name')}
-                  className="w-full p-2 border rounded-md"
-                  placeholder="e.g., January 2025 Plan"
-                />
-                {errors.name && (
-                  <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>
-                )}
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex justify-end gap-2 mt-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    reset();
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  isLoading={createMonthlyPlanMutation.isPending}
-                >
-                  Create Plan
-                </Button>
-              </div>
-            </form>
+            <CreateMonthlyPlanForm
+              onSubmit={handleCreateMonthlyPlan}
+              onCancel={() => setIsModalOpen(false)}
+              isSubmitting={createMonthlyPlanMutation.isPending}
+              isAdmin={user?.isAdmin || false}
+              selectedHouseholdId={selectedHouseholdId}
+              households={households}
+              templates={templates}
+              isLoadingTemplates={isLoadingTemplates}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              onMonthChange={handleMonthChange}
+              onYearChange={handleYearChange}
+            />
           </div>
         </div>
       )}

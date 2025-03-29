@@ -4,7 +4,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { users } from "../db/schema";
-import {
+import type {
   UserModel
 } from "../db/types";
 import { generateToken, comparePassword, hashPassword } from "../utils/auth";
@@ -13,13 +13,13 @@ import {
   createDatabaseQueryError,
   createInvalidCredentialsError,
   createDuplicateRecordError,
-  AppResult
+  type AppResult
 } from "../utils/result";
 import { ok, err } from "neverthrow";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 // Import shared types
-import {
+import type {
   User,
   CreateUserRequest,
   AuthResponse
@@ -200,52 +200,57 @@ authRoutes.post(
   authenticate,
   requireAdmin,
   async (c) => {
-    const userData = await c.req.valid("json");
+    try {
+      const userData = await c.req.valid("json");
 
-    // Check if username already exists
-    const usernameExistsResult = await checkUsernameExists(userData.username);
+      // Check if username already exists
+      const usernameExistsResult = await checkUsernameExists(userData.username);
 
-    if (usernameExistsResult.isErr()) {
-      const error = usernameExistsResult.error;
-      // If it's a duplicate record error
-      if (error.type === "DUPLICATE_RECORD") {
+      if (usernameExistsResult.isErr()) {
+        const error = usernameExistsResult.error;
+        // If it's a duplicate record error
+        if (error.type === "DUPLICATE_RECORD") {
+          return c.json(
+            { message: error.message, type: error.type },
+            (error.statusCode || 409) as ContentfulStatusCode
+          );
+        }
+        // Any other error
         return c.json(
           { message: error.message, type: error.type },
-          (error.statusCode || 409) as ContentfulStatusCode
+          (error.statusCode || 500) as ContentfulStatusCode
         );
       }
-      // Any other error
-      return c.json(
-        { message: error.message, type: error.type },
-        (error.statusCode || 500) as ContentfulStatusCode
-      );
+
+      // Hash password
+      const passwordHashResult = await hashPassword(userData.password);
+      if (passwordHashResult.isErr()) {
+        const error = passwordHashResult.error;
+        return c.json({ message: error.message, type: error.type }, error.statusCode as ContentfulStatusCode);
+      }
+
+      // Create user
+      const userResult = await createUser(userData, passwordHashResult.value);
+      if (userResult.isErr()) {
+        const error = userResult.error;
+        return c.json({ message: error.message, type: error.type }, error.statusCode as ContentfulStatusCode);
+      }
+
+      // Extract the user model without the password hash
+      const userModel = userResult.value;
+      const user: User = {
+        id: userModel.id,
+        username: userModel.username,
+        firstName: userModel.firstName,
+        lastName: userModel.lastName,
+        isAdmin: userModel.isAdmin,
+      };
+
+      return c.json({ user }, 201 as ContentfulStatusCode);
+    } catch (error) {
+      const appError = createDatabaseQueryError('Failed to create user', error);
+      return c.json({ message: appError.message, type: appError.type }, appError.statusCode as ContentfulStatusCode);
     }
-
-    // Hash password
-    const passwordHash = await hashPassword(userData.password);
-
-    // Create user
-    const userResult = await createUser(userData, passwordHash);
-
-    if (userResult.isErr()) {
-      const error = userResult.error;
-      return c.json(
-        { message: error.message, type: error.type },
-        (error.statusCode || 500) as ContentfulStatusCode
-      );
-    }
-
-    // Extract the user model without the password hash
-    const userModel = userResult.value;
-    const user: User = {
-      id: userModel.id,
-      username: userModel.username,
-      firstName: userModel.firstName,
-      lastName: userModel.lastName,
-      isAdmin: userModel.isAdmin,
-    };
-
-    return c.json({ user }, 201 as ContentfulStatusCode);
   }
 );
 
