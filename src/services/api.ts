@@ -78,7 +78,6 @@ const handleApiError = (error: unknown) => {
       responseData: axiosError.response?.data,
     } : undefined;
 
-    console.warn(axiosError);
     console.error(
       'API response validation failed',
       error,
@@ -548,7 +547,6 @@ const api = {
   // Monthly Plans endpoints
   monthlyPlans: {
     getByHousehold: async (householdId: number): Promise<MonthlyPlanResponse[]> => {
-      console.log('>>>>>>>>>> getByHousehold');
       try {
         const response = await axios.get<{ plans: MonthlyPlanResponse[] }>(`/monthly-plans/household/${householdId}`);
         const validatedData = z.object({ plans: z.array(monthlyPlanSchema) }).parse(response.data);
@@ -559,7 +557,6 @@ const api = {
         }
     },
     getById: async (id: number): Promise<MonthlyPlanDetailResponse> => {
-      console.log('>>>>>>>>>> getById');
         const response = await axios.get<MonthlyPlanDetailResponse>(`/monthly-plans/${id}`);
         const validatedData = monthlyPlanDetailSchema.parse(response.data);
         return validatedData;

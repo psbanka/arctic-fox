@@ -453,7 +453,6 @@ templateRoutes.get("/household/:householdId", async (c) => {
 
   // Get templates for this household
   const templatesResult = await getHouseholdTemplates(householdId);
-  console.log('>>>>>>>>>> templatesResult', templatesResult);
 
   if (templatesResult.isErr()) {
     const error = templatesResult.error;

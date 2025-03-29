@@ -34,12 +34,10 @@ const MonthlyPlansPage: FC = () => {
     enabled: user?.isAdmin || false,
   });
 
-
   const queryFunction = () => selectedHouseholdId
     ? api.monthlyPlans.getByHousehold(selectedHouseholdId)
     : []
 
-  console.log('>>>>>>>>>> selectedHouseholdId', selectedHouseholdId);
   // Fetch monthly plans based on selected household
   const {
     data: monthlyPlans,
@@ -47,12 +45,6 @@ const MonthlyPlansPage: FC = () => {
   } = useQuery({
     queryKey: ['monthlyPlans', selectedHouseholdId],
     queryFn: queryFunction,
-    /*
-    queryFn: () =>
-      selectedHouseholdId
-        ? api.monthlyPlans.getByHousehold(selectedHouseholdId)
-        : Promise.resolve([]),
-        */
     enabled: !!selectedHouseholdId,
   });
 
@@ -73,11 +65,9 @@ const MonthlyPlansPage: FC = () => {
   // Create monthly plan mutation
   const createMonthlyPlanMutation = useMutation({
     mutationFn: (data: CreateMonthlyPlanFormData) => {
-      debugger;
       return api.monthlyPlans.create(data);
     },
     onSuccess: (newPlan) => {
-      debugger;
       toast.success('Monthly plan created successfully!');
       setIsModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ['monthlyPlans', selectedHouseholdId] });
@@ -85,14 +75,12 @@ const MonthlyPlansPage: FC = () => {
       navigate(`/monthly-plans/${newPlan.id}`);
     },
     onError: (error) => {
-      debugger;
       toast.error('Failed to create monthly plan');
       console.error('Create monthly plan error:', error);
     },
   });
 
   const handleCreateMonthlyPlan = (data: CreateMonthlyPlanFormData) => {
-    debugger;
     createMonthlyPlanMutation.mutate(data);
   };
 

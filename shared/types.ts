@@ -181,6 +181,7 @@ export interface CreateUserRequest {
   firstName: string;
   lastName: string;
   isAdmin?: boolean;
+  defaultHouseholdId?: number;
 }
 
 export interface CreateHouseholdRequest {

@@ -6,11 +6,11 @@ import { format } from 'date-fns';
 import {
   ArrowLeft,
   Clock,
-  Star,
+  // Star,
   CheckCircle2,
   XCircle,
   BarChart3,
-  User as UserIcon,
+  // User as UserIcon,
   CheckSquare,
 } from 'lucide-react';
 import api from '../../services/api';
@@ -166,6 +166,7 @@ const MonthlyPlanDetailPage: FC = () => {
   };
 
   // TODO: Get category completion data
+  // @ts-expect-error TODO
   const getCategoryCompletionData = (categoryId: number) => {
     return null;
     /*
@@ -534,13 +535,15 @@ const MonthlyPlanDetailPage: FC = () => {
                   {completionData && (
                     <div className="mt-2">
                       <div className="text-sm text-gray-500">
-                        {completionData.completedTasks}/{completionData.totalTasks} tasks completed
+                        {/*completionData.completedTasks}/{completionData.totalTasks*/} tasks completed
                       </div>
                       <div className="mt-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                        {/*
                         <div
                           className="h-full bg-blue-500 transition-all duration-300"
                           style={{ width: `${completionData.completionRate}%` }}
                         />
+                        */}
                       </div>
                     </div>
                   )}

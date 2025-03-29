@@ -1,5 +1,5 @@
-import { InferSelectModel, InferInsertModel } from "drizzle-orm";
-import {
+import type { InferSelectModel, InferInsertModel } from "drizzle-orm";
+import type {
   users,
   households,
   householdMembers,
@@ -13,7 +13,7 @@ import {
 } from "./schema";
 
 // Import shared API types
-import * as SharedTypes from "@shared/types";
+import type * as SharedTypes from "@shared/types";
 
 // Database model types (internal to the server)
 export type UserModel = InferSelectModel<typeof users>;

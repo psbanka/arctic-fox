@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: varchar("username", { length: 100 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  defaultHouseholdId: integer("default_household_id").references(() => households.id),
   firstName: varchar("first_name", { length: 100 }).notNull(),
   lastName: varchar("last_name", { length: 100 }).notNull(),
   isAdmin: boolean("is_admin").default(false).notNull(),

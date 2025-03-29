@@ -47,11 +47,9 @@ const createUserSchema = z.object({
  */
 async function getUserByUsername(username: string): Promise<AppResult<UserModel>> {
   try {
-    console.log('----------------------- a');
     const userModel = await db.query.users.findFirst({
       where: eq(users.username, username),
     }) as UserModel | undefined;
-    console.log('----------------------- a');
 
     if (!userModel) {
       return err(createInvalidCredentialsError());
@@ -116,7 +114,8 @@ async function createUser(userData: CreateUserRequest, passwordHash: string): Pr
         lastName: userData.lastName,
         isAdmin: userData.isAdmin || false,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        defaultHouseholdId: userData.defaultHouseholdId || null,
       })
       .returning({
         id: users.id,
@@ -126,7 +125,8 @@ async function createUser(userData: CreateUserRequest, passwordHash: string): Pr
         lastName: users.lastName,
         isAdmin: users.isAdmin,
         createdAt: users.createdAt,
-        updatedAt: users.updatedAt
+        updatedAt: users.updatedAt,
+        defaultHouseholdId: users.defaultHouseholdId,
       });
 
     return ok(newUserModel);
@@ -190,7 +190,14 @@ authRoutes.post(
 // Current user endpoint
 authRoutes.get("/me", authenticate, async (c) => {
   const user = c.get("user");
-  return c.json({ user });
+  const userModel = await db.query.users.findFirst({
+    where: eq(users.id, user.id),
+  });
+
+  if (!userModel) {
+    return c.json({ message: 'User not found in database'});
+  }
+  return c.json({ user: userModel });
 });
 
 // Admin-only: Create user

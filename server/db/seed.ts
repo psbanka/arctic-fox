@@ -18,6 +18,14 @@ async function seedDatabase() {
   console.log("Seeding database...");
 
   try {
+    // Create a household
+    const [doeHousehold] = await db
+      .insert(households)
+      .values({
+        name: "Doe Family",
+      })
+      .returning();
+
     // Create admin user
     const adminPasswordHash = await hash("admin123", 10);
     const [ adminUser ] = await db
@@ -25,6 +33,7 @@ async function seedDatabase() {
       .values({
         username: "admin",
         passwordHash: adminPasswordHash,
+        defaultHouseholdId: doeHousehold.id,
         firstName: "Admin",
         lastName: "User",
         isAdmin: true,
@@ -38,6 +47,7 @@ async function seedDatabase() {
       .values({
         username: "john.doe",
         passwordHash: user1PasswordHash,
+        defaultHouseholdId: doeHousehold.id,
         firstName: "John",
         lastName: "Doe",
         isAdmin: false,
@@ -50,17 +60,10 @@ async function seedDatabase() {
       .values({
         username: "jane.doe",
         passwordHash: user2PasswordHash,
+        defaultHouseholdId: doeHousehold.id,
         firstName: "Jane",
         lastName: "Doe",
         isAdmin: false,
-      })
-      .returning();
-
-    // Create a household
-    const [doeHousehold] = await db
-      .insert(households)
-      .values({
-        name: "Doe Family",
       })
       .returning();
 
