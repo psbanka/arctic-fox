@@ -15,16 +15,15 @@ import {
   taskAssignments,
 } from "../db/schema";
 import { eq, and, inArray, desc } from "drizzle-orm";
+import { ok, err, type AppResult } from "../utils/result";
 import { authenticate } from "../middleware/auth";
 import {
   createDatabaseQueryError,
   createRecordNotFoundError,
   createInvalidInputError,
-  createInsufficientPermissionsError,
-  type AppResult,
-  ok,
-  err
 } from "../utils/result";
+import type { Task } from "@shared/types";
+import { verifyHouseholdMembership } from "../utils/household";
 
 const monthlyPlanRoutes = new Hono();
 
@@ -103,28 +102,6 @@ interface PlanStatistics {
   totalStoryPoints: number;
   completedStoryPoints: number;
   storyPointsCompletionPercentage: number;
-}
-
-/**
- * Verify a user is a member of a household
- */
-async function verifyHouseholdMembership(userId: number, householdId: number): Promise<AppResult<boolean>> {
-  try {
-    const membership = await db.query.householdMembers.findFirst({
-      where: and(
-        eq(householdMembers.userId, userId),
-        eq(householdMembers.householdId, householdId),
-      ),
-    });
-
-    if (!membership) {
-      return err(createInsufficientPermissionsError("Household not found or access denied"));
-    }
-
-    return ok(true);
-  } catch (error) {
-    return err(createDatabaseQueryError("Failed to verify household membership", error));
-  }
 }
 
 /**
@@ -449,6 +426,80 @@ async function getPlanStatistics(planId: number): Promise<AppResult<PlanStatisti
   }
 }
 
+/**
+ * Get a task with its category name and assignments
+ */
+async function getTaskWithCategoryNameAndAssignments(taskId: number): Promise<AppResult<Task & { monthlyPlanId: number }>> {
+  try {
+    // Get the task with category name
+    const [task] = await db
+      .select({
+        id: tasks.id,
+        name: tasks.name,
+        description: tasks.description,
+        categoryId: tasks.categoryId,
+        categoryName: categories.name,
+        storyPoints: tasks.storyPoints,
+        isTemplateTask: tasks.isTemplateTask,
+        isCompleted: tasks.isCompleted,
+        completedAt: tasks.completedAt,
+        completedBy: tasks.completedBy,
+        dueDate: tasks.dueDate,
+        createdAt: tasks.createdAt,
+        updatedAt: tasks.updatedAt,
+        monthlyPlanId: tasks.monthlyPlanId,
+      })
+      .from(tasks)
+      .leftJoin(
+        categories,
+        eq(tasks.categoryId, categories.id),
+      )
+      .where(eq(tasks.id, taskId));
+
+    if (!task) {
+      return err(createRecordNotFoundError("Task not found"));
+    }
+
+    // Get task assignments
+    const assignmentsResult = await getTaskAssignments([taskId]);
+
+    if (assignmentsResult.isErr()) {
+      const error = assignmentsResult.error;
+      return err(createDatabaseQueryError("Failed to fetch task assignments", error));
+    }
+
+    const assignments = assignmentsResult.value;
+
+    // Group assignments by task
+    const assignmentsByTask = assignments.reduce((acc, curr) => {
+      if (!acc[curr.taskId]) {
+        acc[curr.taskId] = [];
+      }
+      acc[curr.taskId].push({
+        userId: curr.userId,
+        firstName: curr.firstName,
+        lastName: curr.lastName,
+      });
+      return acc;
+    }, {} as Record<number, { userId: number; firstName: string; lastName: string }[]>);
+
+    // Add assignments to task and convert dates to ISO strings
+    const taskWithAssignments: Task & { monthlyPlanId: number } = {
+      ...task,
+      categoryName: task.categoryName || 'Uncategorized',
+      assignedUsers: assignmentsByTask[taskId] || [],
+      completedAt: task.completedAt?.toISOString() || null,
+      dueDate: task.dueDate?.toISOString() || null,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString(),
+    };
+
+    return ok(taskWithAssignments);
+  } catch (error) {
+    return err(createDatabaseQueryError("Failed to fetch task with category and assignments", error));
+  }
+}
+
 // Get monthly plans for a household
 monthlyPlanRoutes.get("/household/:householdId", async (c) => {
   const user = c.get("user");
@@ -730,25 +781,6 @@ async function updateTaskCompletionStatus(
   }
 }
 
-/**
- * Get a task by ID
- */
-async function getTaskById(taskId: number): Promise<AppResult<typeof tasks.$inferSelect>> {
-  try {
-    const task = await db.query.tasks.findFirst({
-      where: eq(tasks.id, taskId),
-    });
-
-    if (!task) {
-      return err(createRecordNotFoundError("Task not found"));
-    }
-
-    return ok(task);
-  } catch (error) {
-    return err(createDatabaseQueryError("Failed to get task", error));
-  }
-}
-
 // Complete/uncomplete a task
 monthlyPlanRoutes.patch(
   "/tasks/:taskId/complete",
@@ -763,8 +795,8 @@ monthlyPlanRoutes.patch(
       return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
 
-    // Get the task
-    const taskResult = await getTaskById(taskId);
+    // Get the task with category and assignments
+    const taskResult = await getTaskWithCategoryNameAndAssignments(taskId);
 
     if (taskResult.isErr()) {
       const error = taskResult.error;
@@ -809,7 +841,15 @@ monthlyPlanRoutes.patch(
       return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
     }
 
-    return c.json({ task: updateResult.value }, (200 as ContentfulStatusCode));
+    // Get the updated task with category and assignments
+    const updatedTaskResult = await getTaskWithCategoryNameAndAssignments(taskId);
+
+    if (updatedTaskResult.isErr()) {
+      const error = updatedTaskResult.error;
+      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
+    }
+
+    return c.json({ task: updatedTaskResult.value }, (200 as ContentfulStatusCode));
   }
 );
 

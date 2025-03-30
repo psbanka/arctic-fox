@@ -8,7 +8,13 @@
     "outDir": "dist/server",
     "rootDir": ".",
     "skipLibCheck": true,
-    "allowImportingTsExtensions": false
+    "allowImportingTsExtensions": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@server/*": ["./server/*"],
+      "@shared/*": ["./shared/*"]
+    }
   },
   "include": ["server/**/*.ts", "shared/**/*.ts"],
   "exclude": ["server/**/*.spec.ts", "server/**/*.test.ts", "node_modules"]
