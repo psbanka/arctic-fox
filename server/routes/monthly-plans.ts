@@ -22,8 +22,9 @@ import {
   createRecordNotFoundError,
   createInvalidInputError,
 } from "../utils/result";
-import type { Task } from "@shared/types";
+import type { Task, Category, MonthlyPlanDetail, PlanStats } from "@shared/types";
 import { verifyHouseholdMembership } from "../utils/household";
+import { mapMonthlyPlanModelToMonthlyPlan } from "../db/types";
 
 const monthlyPlanRoutes = new Hono();
 
@@ -704,42 +705,15 @@ monthlyPlanRoutes.get("/:id", async (c) => {
 
   const assignments = assignmentsResult.value;
 
-  // Group assignments by task
-  const assignmentsByTask = assignments.reduce((acc, curr) => {
-    if (!acc[curr.taskId]) {
-      acc[curr.taskId] = [];
-    }
-    acc[curr.taskId].push({
-      userId: curr.userId,
-      firstName: curr.firstName,
-      lastName: curr.lastName,
-    });
-    return acc;
-  }, {} as Record<number, { userId: number; firstName: string; lastName: string }[]>);
-
-  // Add assignments to tasks
-  const tasksWithAssignments = tasksList.map(task => ({
-    ...task,
-    assignedUsers: assignmentsByTask[task.id] || [],
-  }));
-
-  // Get plan members
-  const membersResult = await getPlanMembers(plan.id);
+  // Get members for this household
+  const membersResult = await getPlanMembers(planId);
 
   if (membersResult.isErr()) {
     const error = membersResult.error;
     return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
-  // Get plan statistics
-  const statsResult = await getPlanStatistics(planId);
-
-  if (statsResult.isErr()) {
-    const error = statsResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-  }
-
-  // Get household categories for reference
+  // Get categories for this household
   const categoriesResult = await getHouseholdCategories(plan.householdId);
 
   if (categoriesResult.isErr()) {
@@ -747,14 +721,71 @@ monthlyPlanRoutes.get("/:id", async (c) => {
     return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
   }
 
-  // FIXME: Better output typechecking
-  return c.json({
-    plan,
-    members: membersResult.value,
+  // Get stats for this plan
+  const statsResult = await getPlanStatistics(planId);
+
+  if (statsResult.isErr()) {
+    const error = statsResult.error;
+    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+  }
+
+  // Map tasks with their assignments
+  const tasksWithAssignments: Task[] = tasksList.map(task => ({
+    id: task.id,
+    name: task.name,
+    description: task.description,
+    categoryId: task.categoryId,
+    categoryName: task.categoryName || 'Uncategorized',
+    storyPoints: task.storyPoints,
+    isTemplateTask: task.isTemplateTask,
+    isCompleted: task.isCompleted,
+    completedAt: task.completedAt?.toISOString() || null,
+    completedBy: task.completedBy,
+    dueDate: task.dueDate?.toISOString() || null,
+    assignedUsers: assignments
+      .filter(assignment => assignment.taskId === task.id)
+      .map(assignment => ({
+        userId: assignment.userId,
+        firstName: assignment.firstName,
+        lastName: assignment.lastName,
+      })),
+    createdAt: task.createdAt.toISOString(),
+    updatedAt: task.updatedAt.toISOString(),
+  }));
+
+  // Map categories to the expected format
+  const mappedCategories: Category[] = categoriesResult.value.map(category => ({
+    id: category.id,
+    name: category.name,
+    description: category.description,
+    householdId: category.householdId,
+    createdAt: category.createdAt.toISOString(),
+    updatedAt: category.updatedAt.toISOString(),
+  }));
+
+  // Map stats to the expected format
+  const mappedStats: PlanStats = {
+    totalTasks: statsResult.value.totalTasks,
+    completedTasks: statsResult.value.completedTasks,
+    totalStoryPoints: statsResult.value.totalStoryPoints,
+    completedStoryPoints: statsResult.value.completedStoryPoints,
+    completionRate: statsResult.value.tasksCompletionPercentage,
+    storyPointCompletionRate: statsResult.value.storyPointsCompletionPercentage,
+    categoryStats: [], // TODO: Implement category stats
+    userStats: [], // TODO: Implement user stats
+    previousMonth: null, // TODO: Implement previous month stats
+  };
+
+  // Construct the response according to the frontend's expected schema
+  const response = {
     tasks: tasksWithAssignments,
-    categories: categoriesResult.value,
-    stats: {...statsResult.value, previousMonth: null }, // TODO: previousMonth
-  }, (200 as ContentfulStatusCode));
+    categories: mappedCategories,
+    plan: mapMonthlyPlanModelToMonthlyPlan(plan),
+    members: membersResult.value,
+    stats: mappedStats,
+  };
+
+  return c.json(response, (200 as ContentfulStatusCode));
 });
 
 // Update task completion status
