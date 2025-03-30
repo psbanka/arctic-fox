@@ -6,16 +6,13 @@ import { format } from 'date-fns';
 import {
   ArrowLeft,
   Clock,
-  // Star,
-  CheckCircle2,
-  XCircle,
   BarChart3,
-  // User as UserIcon,
   CheckSquare,
 } from 'lucide-react';
 import api from '../../services/api';
 import Button from '../../components/ui/Button';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { TaskList } from '../../components/tasks/TaskList';
 import type { Task } from '@shared/types';
 
 const MonthlyPlanDetailPage: FC = () => {
@@ -105,11 +102,11 @@ const MonthlyPlanDetailPage: FC = () => {
     });
   };
 
-  // Group tasks by category, then by title and owner
+  // Group tasks by category
   const getTasksByCategory = () => {
     const filteredTasks = getFilteredTasks();
 
-    // First group by category
+    // Group by category
     const tasksByCategory = filteredTasks.reduce<Record<number, Task[]>>((acc, task) => {
       if (!acc[task.categoryId]) {
         acc[task.categoryId] = [];
@@ -118,42 +115,7 @@ const MonthlyPlanDetailPage: FC = () => {
       return acc;
     }, {});
 
-    // Then for each category, group tasks by title and owner
-    const groupedTasksByCategory: Record<number, Record<string, Task[]>> = {};
-
-    // biome-ignore lint/complexity/noForEach: <explanation>
-    Object.entries(tasksByCategory).forEach(([categoryId, tasks]) => {
-      const numCategoryId = Number.parseInt(categoryId);
-      groupedTasksByCategory[numCategoryId] = {};
-
-      // biome-ignore lint/complexity/noForEach: <explanation>
-      tasks.forEach(task => {
-        // Create a unique key for each combination of task title and assigned user
-        // biome-ignore lint/complexity/noForEach: <explanation>
-                task.assignedUsers.forEach(user => {
-          const groupKey = `${task.name}-${user.userId}`;
-
-          if (!groupedTasksByCategory[numCategoryId][groupKey]) {
-            groupedTasksByCategory[numCategoryId][groupKey] = [];
-          }
-
-          groupedTasksByCategory[numCategoryId][groupKey].push(task);
-        });
-
-        // Handle tasks with no assignees
-        if (task.assignedUsers.length === 0) {
-          const groupKey = `${task.name}-unassigned`;
-
-          if (!groupedTasksByCategory[numCategoryId][groupKey]) {
-            groupedTasksByCategory[numCategoryId][groupKey] = [];
-          }
-
-          groupedTasksByCategory[numCategoryId][groupKey].push(task);
-        }
-      });
-    });
-
-    return groupedTasksByCategory;
+    return tasksByCategory;
   };
 
   // Get category name by ID
@@ -163,26 +125,6 @@ const MonthlyPlanDetailPage: FC = () => {
     if (!plan.categories) return 'Unknown';
     const category = plan.categories.find(c => c.id === categoryId);
     return category ? category.name : 'Unknown';
-  };
-
-  // TODO: Get category completion data
-  // @ts-expect-error TODO
-  const getCategoryCompletionData = (categoryId: number) => {
-    return null;
-    /*
-    if (!planResult) return null;
-    const plan = planResult;
-    if (!plan.stats || !plan.stats.categoryStats) return null;
-
-    const categoryStat = plan.stats.categoryStats.find(c => c.categoryId === categoryId);
-    if (!categoryStat) return null;
-
-    return {
-      ...categoryStat,
-      completionRate: categoryStat.totalTasks > 0 ?
-        (categoryStat.completedTasks / categoryStat.totalTasks) * 100 : 0
-    };
-    */
   };
 
   if (isLoadingPlan) {
@@ -425,10 +367,11 @@ const MonthlyPlanDetailPage: FC = () => {
         <h2 className="text-lg font-semibold mb-4">Filters</h2>
         <div className="flex flex-wrap gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="category-filter" className="block text-sm font-medium text-gray-700 mb-1">
               Category
             </label>
             <select
+              id="category-filter"
               className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               value={filterCategory || ''}
               onChange={(e) => setFilterCategory(e.target.value ? Number.parseInt(e.target.value) : null)}
@@ -443,10 +386,11 @@ const MonthlyPlanDetailPage: FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="assignee-filter" className="block text-sm font-medium text-gray-700 mb-1">
               Assignee
             </label>
             <select
+              id="assignee-filter"
               className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               value={filterAssignee || ''}
               onChange={(e) => setFilterAssignee(e.target.value ? Number.parseInt(e.target.value) : null)}
@@ -477,79 +421,14 @@ const MonthlyPlanDetailPage: FC = () => {
       {/* Tasks */}
       <div className="bg-white shadow rounded-lg p-6">
         <h2 className="text-lg font-semibold mb-4">Tasks</h2>
-        {Object.entries(tasksByCategory).map(([categoryId, tasksByTitle]) => (
+        {Object.entries(tasksByCategory).map(([categoryId, tasks]) => (
           <div key={categoryId} className="mb-8">
             <h3 className="text-md font-medium mb-4">{getCategoryName(Number.parseInt(categoryId))}</h3>
-            {Object.entries(tasksByTitle).map(([title, tasks]) => {
-              const firstTask = tasks[0];
-              const isCompleted = firstTask.isCompleted;
-              const completionData = getCategoryCompletionData(Number.parseInt(categoryId));
-
-              return (
-                <div key={title} className="mb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <button type="button"
-                        className={`p-2 rounded-full ${
-                          isCompleted ? 'text-green-500' : 'text-gray-400'
-                        }`}
-                        onClick={() => !plan.isClosed && handleToggleTaskCompletion(firstTask)}
-                        disabled={plan.isClosed}
-                      >
-                        {isCompleted ? (
-                          <CheckCircle2 className="h-5 w-5" />
-                        ) : (
-                          <XCircle className="h-5 w-5" />
-                        )}
-                      </button>
-                      <div>
-                        <div className="font-medium">{firstTask.name}</div>
-                        <div className="text-sm text-gray-500">
-                          {firstTask.description || 'No description'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-500">
-                        {firstTask.storyPoints} points
-                      </span>
-                      {firstTask.dueDate && (
-                        <span className="text-sm text-gray-500">
-                          Due: {format(new Date(firstTask.dueDate), 'MMM d')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {firstTask.assignedUsers.map(user => (
-                      <span
-                        key={user.userId}
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                      >
-                        {user.firstName} {user.lastName}
-                      </span>
-                    ))}
-                  </div>
-
-                  {completionData && (
-                    <div className="mt-2">
-                      <div className="text-sm text-gray-500">
-                        {/*completionData.completedTasks}/{completionData.totalTasks*/} tasks completed
-                      </div>
-                      <div className="mt-1 h-1 bg-gray-200 rounded-full overflow-hidden">
-                        {/*
-                        <div
-                          className="h-full bg-blue-500 transition-all duration-300"
-                          style={{ width: `${completionData.completionRate}%` }}
-                        />
-                        */}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            <TaskList
+              tasks={tasks}
+              isPlanClosed={plan.isClosed}
+              onToggleTaskCompletion={handleToggleTaskCompletion}
+            />
           </div>
         ))}
       </div>

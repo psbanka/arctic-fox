@@ -70,6 +70,7 @@ interface TemplateTaskWithAssignments {
   storyPoints: number;
   assignToAll: boolean;
   assignedUserIds: number[];
+  timesPerMonth: number;
 }
 
 interface PlanTaskWithCategory {
@@ -275,6 +276,7 @@ async function getTemplateTasksWithAssignments(templateId: number): Promise<AppR
         categoryId: templateTasks.categoryId,
         storyPoints: templateTasks.storyPoints,
         assignToAll: templateTasks.assignToAll,
+        timesPerMonth: templateTasks.timesPerMonth,
       })
       .from(templateTasks)
       .where(eq(templateTasks.templateId, templateId));
@@ -539,26 +541,28 @@ monthlyPlanRoutes.post(
 
       // Create tasks from template tasks
       for (const templateTask of templateTasks) {
-        const taskResult = await createTaskFromTemplate(templateTask, newPlan.id);
+        for (let i = 0; i < templateTask.timesPerMonth; i++) {
+          const taskResult = await createTaskFromTemplate(templateTask, newPlan.id);
 
-        if (taskResult.isErr()) {
-          const error = taskResult.error;
-          return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-        }
-
-        const newTask = taskResult.value;
-
-        // Create task assignments
-        const assigneeIds = templateTask.assignToAll
-          ? allMemberIds
-          : templateTask.assignedUserIds;
-
-        if (assigneeIds.length > 0) {
-          const assignmentsResult = await createTaskAssignments(newTask.id, assigneeIds);
-
-          if (assignmentsResult.isErr()) {
-            const error = assignmentsResult.error;
+          if (taskResult.isErr()) {
+            const error = taskResult.error;
             return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+          }
+
+          const newTask = taskResult.value;
+
+          // Create task assignments
+          const assigneeIds = templateTask.assignToAll
+            ? allMemberIds
+            : templateTask.assignedUserIds;
+
+          if (assigneeIds.length > 0) {
+            const assignmentsResult = await createTaskAssignments(newTask.id, assigneeIds);
+
+            if (assignmentsResult.isErr()) {
+              const error = assignmentsResult.error;
+              return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+            }
           }
         }
       }
