@@ -16,6 +16,7 @@ interface TaskGroup {
   categoryId: number;
   categoryName: string;
   isCompleted: boolean;
+  taskId: number;
 }
 
 interface CategoryGroup {
@@ -53,6 +54,7 @@ export function TaskList({ tasks, isPlanClosed, onToggleTaskCompletion }: { task
           categoryId: Number.parseInt(categoryId, 10),
           categoryName,
           isCompleted: task.isCompleted,
+          taskId: task.id,
         };
       }
       acc[name].count++;
@@ -88,7 +90,7 @@ export function TaskList({ tasks, isPlanClosed, onToggleTaskCompletion }: { task
                       type="button"
                       className={`p-2 rounded-full ${group.isCompleted ? 'text-green-500' : 'text-gray-400'}`}
                       onClick={() => !isPlanClosed && onToggleTaskCompletion?.({
-                        id: 0, // We don't have the original task ID in the group
+                        id: group.taskId,
                         name: group.name,
                         description: group.description,
                         categoryId: group.categoryId,
@@ -104,12 +106,13 @@ export function TaskList({ tasks, isPlanClosed, onToggleTaskCompletion }: { task
                         updatedAt: new Date().toISOString(),
                       })}
                       disabled={isPlanClosed}
+                      aria-label={`Toggle completion for ${group.name}`}
                     >
                       <XCircle className="h-5 w-5" />
                     </button>
                     <div>
                       <div className="font-medium">
-                        {group.name} {group.count}
+                        {group.name}
                         <span className="ml-2 text-sm text-gray-500">({group.count} tasks)</span>
                       </div>
                       <div className="text-sm text-gray-500">{group.description}</div>

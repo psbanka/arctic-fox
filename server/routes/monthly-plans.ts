@@ -750,7 +750,7 @@ async function getTaskById(taskId: number): Promise<AppResult<typeof tasks.$infe
 }
 
 // Complete/uncomplete a task
-monthlyPlanRoutes.put(
+monthlyPlanRoutes.patch(
   "/tasks/:taskId/complete",
   zValidator("json", completeTaskSchema),
   async (c) => {
