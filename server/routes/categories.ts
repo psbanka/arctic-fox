@@ -1,5 +1,6 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import type { z } from "zod";
 import { db } from "../db";
 import { categories, householdMembers, templateTasks } from "../db/schema";
 import { eq, and } from "drizzle-orm";
@@ -9,11 +10,12 @@ import {
   createRecordNotFoundError,
   createInvalidInputError,
   createInsufficientPermissionsError,
-  type AppResult
+  type AppResult,
 } from "../utils/result";
 import { ok, err } from "neverthrow";
-import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { categorySchema } from "@shared/schemas";
+import { typedJson, type TypedResponse, safeParse } from "./helpers";
 
 const categoryRoutes = new Hono();
 
@@ -23,7 +25,10 @@ categoryRoutes.use("*", authenticate);
 /**
  * Check if a user is a member of a household
  */
-async function verifyHouseholdMembership(userId: number, householdId: number): Promise<AppResult<boolean>> {
+async function verifyHouseholdMembership(
+  userId: number,
+  householdId: number,
+): Promise<AppResult<boolean>> {
   try {
     const membership = await db.query.householdMembers.findFirst({
       where: and(
@@ -45,7 +50,9 @@ async function verifyHouseholdMembership(userId: number, householdId: number): P
 /**
  * Get a category by ID
  */
-async function getCategoryById(categoryId: number): Promise<AppResult<typeof categories.$inferSelect>> {
+async function getCategoryById(
+  categoryId: number,
+): Promise<AppResult<typeof categories.$inferSelect>> {
   try {
     const category = await db.query.categories.findFirst({
       where: eq(categories.id, categoryId),
@@ -64,7 +71,9 @@ async function getCategoryById(categoryId: number): Promise<AppResult<typeof cat
 /**
  * Get all categories for a household
  */
-async function getHouseholdCategories(householdId: number): Promise<AppResult<typeof categories.$inferSelect[]>> {
+async function getHouseholdCategories(
+  householdId: number,
+): Promise<AppResult<(typeof categories.$inferSelect)[]>> {
   try {
     const householdCategories = await db
       .select()
@@ -83,7 +92,7 @@ async function getHouseholdCategories(householdId: number): Promise<AppResult<ty
 async function createCategory(
   name: string,
   description: string | undefined,
-  householdId: number
+  householdId: number,
 ): Promise<AppResult<typeof categories.$inferSelect>> {
   try {
     const [newCategory] = await db
@@ -110,7 +119,7 @@ async function createCategory(
 async function updateCategory(
   categoryId: number,
   name: string,
-  description: string | undefined
+  description: string | undefined,
 ): Promise<AppResult<typeof categories.$inferSelect>> {
   try {
     const [updatedCategory] = await db
@@ -159,40 +168,55 @@ async function deleteCategory(categoryId: number): Promise<AppResult<boolean>> {
   }
 }
 
-// Get categories for a household
-categoryRoutes.get("/household/:householdId", async (c) => {
-  const user = c.get("user");
-  const householdId = Number.parseInt(c.req.param("householdId"));
+// Here are all th endpoint handlers
+// ----------------------------------------------------------------------------------------
 
-  if (Number.isNaN(householdId)) {
-    const error = createInvalidInputError("Invalid household ID");
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
-  }
+categoryRoutes.get(
+  "/household/:householdId",
+  async (c): Promise<TypedResponse<z.infer<typeof categorySchema>[]>> => {
+    const user = c.get("user");
+    const householdId = Number.parseInt(c.req.param("householdId"));
 
-  // Verify user is a member of this household
-  const membershipResult = await verifyHouseholdMembership(user.id, householdId);
+    if (Number.isNaN(householdId)) {
+      const error = createInvalidInputError("Invalid household ID");
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 400) as ContentfulStatusCode,
+      );
+    }
 
-  if (membershipResult.isErr()) {
-    const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
-  }
+    // Verify user is a member of this household
+    const membershipResult = await verifyHouseholdMembership(user.id, householdId);
 
-  // Get categories for this household
-  const categoriesResult = await getHouseholdCategories(householdId);
+    if (membershipResult.isErr()) {
+      const error = membershipResult.error;
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 403) as ContentfulStatusCode,
+      );
+    }
 
-  if (categoriesResult.isErr()) {
-    const error = categoriesResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-  }
+    // Get categories for this household
+    const categoriesResult = await getHouseholdCategories(householdId);
 
-  return c.json({ categories: categoriesResult.value });
-});
+    if (categoriesResult.isErr()) {
+      const error = categoriesResult.error;
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 500) as ContentfulStatusCode,
+      );
+    }
+
+    const output = categoriesResult.value.map((r) => safeParse(categorySchema, r));
+    return typedJson(c, output, 200);
+  },
+);
 
 // Create a new category
 categoryRoutes.post(
   "/",
   zValidator("json", categorySchema),
-  async (c) => {
+  async (c): Promise<TypedResponse<z.infer<typeof categorySchema>>> => {
     const user = c.get("user");
     const { name, description, householdId } = await c.req.valid("json");
 
@@ -201,7 +225,10 @@ categoryRoutes.post(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 403) as ContentfulStatusCode,
+      );
     }
 
     // Create the category
@@ -209,10 +236,13 @@ categoryRoutes.post(
 
     if (categoryResult.isErr()) {
       const error = categoryResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 500) as ContentfulStatusCode,
+      );
     }
 
-    return c.json({ category: categoryResult.value }, 201);
+    return typedJson(c, safeParse(categorySchema, categoryResult.value), 201);
   },
 );
 
@@ -220,14 +250,17 @@ categoryRoutes.post(
 categoryRoutes.put(
   "/:id",
   zValidator("json", categorySchema.omit({ householdId: true })),
-  async (c) => {
+  async (c): Promise<TypedResponse<z.infer<typeof categorySchema>>> => {
     const user = c.get("user");
     const categoryId = Number.parseInt(c.req.param("id"));
     const { name, description } = await c.req.valid("json");
 
     if (Number.isNaN(categoryId)) {
       const error = createInvalidInputError("Invalid category ID");
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 400) as ContentfulStatusCode,
+      );
     }
 
     // Get the category
@@ -235,7 +268,10 @@ categoryRoutes.put(
 
     if (categoryResult.isErr()) {
       const error = categoryResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 404) as ContentfulStatusCode,
+      );
     }
 
     const category = categoryResult.value;
@@ -245,7 +281,10 @@ categoryRoutes.put(
 
     if (membershipResult.isErr()) {
       const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 403) as ContentfulStatusCode,
+      );
     }
 
     // Update the category
@@ -253,10 +292,13 @@ categoryRoutes.put(
 
     if (updateResult.isErr()) {
       const error = updateResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 500) as ContentfulStatusCode,
+      );
     }
 
-    return c.json({ category: updateResult.value });
+    return typedJson(c, safeParse(categorySchema, updateResult.value), 200);
   },
 );
 
@@ -267,7 +309,10 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (Number.isNaN(categoryId)) {
     const error = createInvalidInputError("Invalid category ID");
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
   }
 
   // Get the category
@@ -275,7 +320,10 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (categoryResult.isErr()) {
     const error = categoryResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 404) as ContentfulStatusCode,
+    );
   }
 
   const category = categoryResult.value;
@@ -285,7 +333,10 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 403) as ContentfulStatusCode,
+    );
   }
 
   // Check if this category has any tasks
@@ -293,14 +344,20 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (hasTasksResult.isErr()) {
     const error = hasTasksResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
   }
 
   if (hasTasksResult.value) {
     const error = createInvalidInputError(
-      "Cannot delete this category because it has tasks associated with it. Please reassign or delete those tasks first."
+      "Cannot delete this category because it has tasks associated with it. Please reassign or delete those tasks first.",
     );
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
   }
 
   // Delete the category
@@ -308,7 +365,10 @@ categoryRoutes.delete("/:id", async (c) => {
 
   if (deleteResult.isErr()) {
     const error = deleteResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
   }
 
   return c.json({ message: "Category deleted successfully" });

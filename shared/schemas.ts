@@ -63,8 +63,8 @@ export const categorySchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   householdId: z.number(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.date().transform((date) => date.toISOString()),
+  updatedAt: z.date().transform((date) => date.toISOString()),
 });
 
 export const createHouseholdSchema = z.object({
@@ -119,14 +119,14 @@ export const userSchema = z.object({
   lastName: z.string(),
   isAdmin: z.boolean(),
   defaultHouseholdId: z.number().optional(),
-  createdAt: z.string().optional(),
+  createdAt: z.date().transform((date) => date.toISOString()),
 });
 
 export const householdSchema = z.object({
   id: z.number(),
   name: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.date().transform((date) => date.toISOString()),
+  updatedAt: z.date().transform((date) => date.toISOString()),
   isOwner: z.boolean().optional(),
 });
 
@@ -141,8 +141,8 @@ export const householdMemberSchema = z.object({
 export const householdDetailSchema = z.object({
   id: z.number(),
   name: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.date().transform((date) => date.toISOString()),
+  updatedAt: z.date().transform((date) => date.toISOString()),
   isOwner: z.boolean(),
   members: z.array(householdMemberSchema),
 });
@@ -163,8 +163,8 @@ export const templateTaskSchema = z.object({
       lastName: z.string(),
     })
   ),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.date().transform((date) => date.toISOString()),
+  updatedAt: z.date().transform((date) => date.toISOString()),
 });
 
 export const templateSchema = z.object({
@@ -172,8 +172,8 @@ export const templateSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   householdId: z.number(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.date().transform((date) => date.toISOString()),
+  updatedAt: z.date().transform((date) => date.toISOString()),
 });
 
 export const templateDetailSchema = templateSchema.extend({
@@ -207,8 +207,8 @@ export const taskSchema = z.object({
       lastName: z.string(),
     })
   ),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.date().transform((date) => date.toISOString()),
+  updatedAt: z.date().transform((date) => date.toISOString()),
 });
 
 export const monthlyPlanSchema = z.object({
@@ -218,8 +218,8 @@ export const monthlyPlanSchema = z.object({
   month: z.number(),
   year: z.number(),
   isClosed: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.date().transform((date) => date.toISOString()),
+  updatedAt: z.date().transform((date) => date.toISOString()),
 });
 
 // TODO
