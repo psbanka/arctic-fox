@@ -12,20 +12,7 @@ import Button from '../../components/ui/Button';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import type { Template, Household } from '@shared/types';
 import { useAuth } from '../../contexts/AuthContext';
-
-// Form validation schema for creating a template
-const createTemplateSchema = z.object({
-  name: z
-    .string()
-    .min(3, 'Name must be at least 3 characters')
-    .max(100, 'Name must be less than 100 characters'),
-  description: z
-    .string()
-    .max(500, 'Description must be less than 500 characters')
-    .nullable()
-    .optional(),
-  householdId: z.number().positive('Please select a household'),
-});
+import { createTemplateSchema } from '@shared/schemas';
 
 type CreateTemplateFormData = z.infer<typeof createTemplateSchema>;
 

@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
 import { db } from "../db";
 import { categories, householdMembers, templateTasks } from "../db/schema";
 import { eq, and } from "drizzle-orm";
@@ -10,22 +9,16 @@ import {
   createRecordNotFoundError,
   createInvalidInputError,
   createInsufficientPermissionsError,
-  AppResult
+  type AppResult
 } from "../utils/result";
 import { ok, err } from "neverthrow";
-import { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import { categorySchema } from "@shared/schemas";
 
 const categoryRoutes = new Hono();
 
 // Apply authentication to all routes
 categoryRoutes.use("*", authenticate);
-
-// Create category schema
-const categorySchema = z.object({
-  name: z.string().min(1, "Category name is required"),
-  description: z.string().optional(),
-  householdId: z.number().int().positive(),
-});
 
 /**
  * Check if a user is a member of a household
@@ -101,6 +94,9 @@ async function createCategory(
         householdId,
       })
       .returning();
+    if (newCategory === undefined) {
+      return err(createDatabaseQueryError("Failed to create category"));
+    }
 
     return ok(newCategory);
   } catch (error) {
@@ -126,6 +122,9 @@ async function updateCategory(
       })
       .where(eq(categories.id, categoryId))
       .returning();
+    if (updatedCategory === undefined) {
+      return err(createDatabaseQueryError("Failed to update category"));
+    }
 
     return ok(updatedCategory);
   } catch (error) {
@@ -163,9 +162,9 @@ async function deleteCategory(categoryId: number): Promise<AppResult<boolean>> {
 // Get categories for a household
 categoryRoutes.get("/household/:householdId", async (c) => {
   const user = c.get("user");
-  const householdId = parseInt(c.req.param("householdId"));
+  const householdId = Number.parseInt(c.req.param("householdId"));
 
-  if (isNaN(householdId)) {
+  if (Number.isNaN(householdId)) {
     const error = createInvalidInputError("Invalid household ID");
     return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
@@ -206,7 +205,7 @@ categoryRoutes.post(
     }
 
     // Create the category
-    const categoryResult = await createCategory(name, description, householdId);
+    const categoryResult = await createCategory(name, description ?? undefined, householdId);
 
     if (categoryResult.isErr()) {
       const error = categoryResult.error;
@@ -223,10 +222,10 @@ categoryRoutes.put(
   zValidator("json", categorySchema.omit({ householdId: true })),
   async (c) => {
     const user = c.get("user");
-    const categoryId = parseInt(c.req.param("id"));
+    const categoryId = Number.parseInt(c.req.param("id"));
     const { name, description } = await c.req.valid("json");
 
-    if (isNaN(categoryId)) {
+    if (Number.isNaN(categoryId)) {
       const error = createInvalidInputError("Invalid category ID");
       return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
@@ -250,7 +249,7 @@ categoryRoutes.put(
     }
 
     // Update the category
-    const updateResult = await updateCategory(categoryId, name, description);
+    const updateResult = await updateCategory(categoryId, name, description ?? undefined);
 
     if (updateResult.isErr()) {
       const error = updateResult.error;
@@ -264,9 +263,9 @@ categoryRoutes.put(
 // Delete a category
 categoryRoutes.delete("/:id", async (c) => {
   const user = c.get("user");
-  const categoryId = parseInt(c.req.param("id"));
+  const categoryId = Number.parseInt(c.req.param("id"));
 
-  if (isNaN(categoryId)) {
+  if (Number.isNaN(categoryId)) {
     const error = createInvalidInputError("Invalid category ID");
     return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }

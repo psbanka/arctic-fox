@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { users } from "../db/schema";
@@ -24,23 +23,9 @@ import type {
   CreateUserRequest,
   AuthResponse
 } from "@shared/types";
+import { loginSchema, createUserSchema } from "@shared/schemas";
 
 const authRoutes = new Hono();
-
-// Login schema
-const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  password: z.string().min(1, "Password is required"),
-});
-
-// Create user schema - use the CreateUserRequest type for validation
-const createUserSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  isAdmin: z.boolean().optional().default(false),
-}) satisfies z.ZodType<CreateUserRequest>;
 
 /**
  * Get a user by username
@@ -129,6 +114,9 @@ async function createUser(userData: CreateUserRequest, passwordHash: string): Pr
         defaultHouseholdId: users.defaultHouseholdId,
       });
 
+    if (newUserModel === undefined) {
+      return err(createDatabaseQueryError("Failed to create user"));
+    }
     return ok(newUserModel);
   } catch (error) {
     return err(createDatabaseQueryError("Failed to create user", error));

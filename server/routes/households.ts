@@ -4,39 +4,29 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { households, householdMembers, users } from "../db/schema";
-import {
+import type {
   HouseholdMember,
   NewHousehold,
   NewHouseholdMember
 } from "../db/types";
 import { authenticate } from "../middleware/auth";
-import { HouseholdDetail, User, Household } from "@shared/types";
+import type { HouseholdDetail, User, Household } from "@shared/types";
 import {
   createDatabaseQueryError,
   createRecordNotFoundError,
   createInvalidInputError,
   createInsufficientPermissionsError,
   createDuplicateRecordError,
-  AppResult
+  type AppResult
 } from "../utils/result";
 import { ok, err } from "neverthrow";
-import { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import { createHouseholdSchema, addMemberSchema, householdMemberSchema } from "@shared/schemas";
 
 const householdRoutes = new Hono();
 
 // Apply authentication to all routes
 householdRoutes.use("*", authenticate);
-
-// Create household schema
-const createHouseholdSchema = z.object({
-  name: z.string().min(1, "Household name is required"),
-});
-
-// Add member schema
-const addMemberSchema = z.object({
-  userId: z.number().int().positive(),
-  isOwner: z.boolean().optional().default(false),
-});
 
 /**
  * Check if a user is an owner of a household
@@ -91,17 +81,16 @@ async function verifyHouseholdMembership(userId: number, householdId: number): P
  */
 async function getHouseholdById(householdId: number): Promise<AppResult<typeof households.$inferSelect>> {
   try {
-    const householdResult = await db
+    const [householdResult] = await db
       .select()
       .from(households)
       .where(eq(households.id, householdId))
       .limit(1);
-
-    if (householdResult.length === 0) {
+    if (householdResult === undefined) {
       return err(createRecordNotFoundError("Household not found"));
     }
 
-    return ok(householdResult[0]);
+    return ok(householdResult);
   } catch (error) {
     return err(createDatabaseQueryError("Failed to get household", error));
   }
@@ -166,6 +155,9 @@ async function createHousehold(name: string): Promise<AppResult<typeof household
       .insert(households)
       .values(householdData)
       .returning();
+    if (newHousehold === undefined) {
+      return err(createDatabaseQueryError("Failed to create household"));
+    }
 
     return ok(newHousehold);
   } catch (error) {
@@ -195,7 +187,7 @@ async function addMemberToHousehold(userId: number, householdId: number, isOwner
 /**
  * Get all members of a household with user info
  */
-async function getHouseholdMembers(householdId: number): Promise<AppResult<any[]>> {
+async function getHouseholdMembers(householdId: number): Promise<AppResult<z.infer< typeof householdMemberSchema>[]>> {
   try {
     const membersData = await db
       .select({
@@ -213,6 +205,9 @@ async function getHouseholdMembers(householdId: number): Promise<AppResult<any[]
           eq(householdMembers.householdId, householdId),
         ),
       );
+    if (membersData === undefined) {
+      return err(createDatabaseQueryError("Failed to fetch household members"));
+    }
 
     return ok(membersData);
   } catch (error) {
@@ -251,6 +246,9 @@ async function updateHouseholdName(householdId: number, name: string): Promise<A
       })
       .where(eq(households.id, householdId))
       .returning();
+    if (updatedHousehold === undefined) {
+      return err(createDatabaseQueryError("Failed to update household"));
+    }
 
     return ok(updatedHousehold);
   } catch (error) {
@@ -348,9 +346,9 @@ householdRoutes.post(
 // Get a specific household by ID
 householdRoutes.get("/:id", async (c) => {
   const user = c.get("user");
-  const householdId = parseInt(c.req.param("id"));
+  const householdId = Number.parseInt(c.req.param("id"));
 
-  if (isNaN(householdId)) {
+  if (Number.isNaN(householdId)) {
     const error = createInvalidInputError("Invalid household ID");
     return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }
@@ -413,10 +411,10 @@ householdRoutes.post(
   zValidator("json", addMemberSchema),
   async (c) => {
     const user = c.get("user");
-    const householdId = parseInt(c.req.param("id"));
+    const householdId = Number.parseInt(c.req.param("id"));
     const { userId, isOwner } = await c.req.valid("json");
 
-    if (isNaN(householdId)) {
+    if (Number.isNaN(householdId)) {
       const error = createInvalidInputError("Invalid household ID");
       return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
@@ -479,10 +477,10 @@ householdRoutes.put(
   zValidator("json", createHouseholdSchema),
   async (c) => {
     const user = c.get("user");
-    const householdId = parseInt(c.req.param("id"));
+    const householdId = Number.parseInt(c.req.param("id"));
     const { name } = await c.req.valid("json");
 
-    if (isNaN(householdId)) {
+    if (Number.isNaN(householdId)) {
       const error = createInvalidInputError("Invalid household ID");
       return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
     }
@@ -510,10 +508,10 @@ householdRoutes.put(
 // Remove a member from a household
 householdRoutes.delete("/:householdId/members/:userId", async (c) => {
   const currentUser = c.get("user");
-  const householdId = parseInt(c.req.param("householdId"));
-  const userIdToRemove = parseInt(c.req.param("userId"));
+  const householdId = Number.parseInt(c.req.param("householdId"));
+  const userIdToRemove = Number.parseInt(c.req.param("userId"));
 
-  if (isNaN(householdId) || isNaN(userIdToRemove)) {
+  if (Number.isNaN(householdId) || Number.isNaN(userIdToRemove)) {
     const error = createInvalidInputError("Invalid household ID or user ID");
     return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
   }

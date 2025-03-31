@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
 import { db } from "../db";
 import {
   templates,
@@ -20,8 +19,9 @@ import {
   createInsufficientPermissionsError,
   type AppResult,
   ok,
-  err
+  err,
 } from "../utils/result";
+import { createTemplateSchema, createTemplateTaskSchema } from "@shared/schemas";
 
 // Define interfaces for return types to avoid 'any'
 interface TemplateTaskWithCategory {
@@ -55,32 +55,13 @@ const templateRoutes = new Hono();
 // Apply authentication to all routes
 templateRoutes.use("*", authenticate);
 
-// Create template schema
-const createTemplateSchema = z.object({
-  name: z.string().min(1, "Template name is required"),
-  description: z.string().optional(),
-  householdId: z.number().int().positive(),
-});
-
-// Create template task schema
-const createTemplateTaskSchema = z.object({
-  name: z.string().min(1, "Task name is required"),
-  description: z.string().optional(),
-  categoryId: z.number().int().positive(),
-  timesPerMonth: z.number().int().min(1, "Must be at least 1"),
-  storyPoints: z.number().int().positive().refine((val) => {
-    // Fibonacci sequence check (1, 2, 3, 5, 8, 13, 21, etc.)
-    const fibNumbers = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
-    return fibNumbers.includes(val);
-  }, "Story points must be a Fibonacci number (1, 2, 3, 5, 8, 13, 21, etc.)"),
-  assignToAll: z.boolean().default(false),
-  assignedUserIds: z.array(z.number().int().positive()).optional(),
-});
-
 /**
  * Verify a user is a member of a household
  */
-async function verifyHouseholdMembership(userId: number, householdId: number): Promise<AppResult<boolean>> {
+async function verifyHouseholdMembership(
+  userId: number,
+  householdId: number,
+): Promise<AppResult<boolean>> {
   try {
     const membership = await db.query.householdMembers.findFirst({
       where: and(
@@ -102,7 +83,9 @@ async function verifyHouseholdMembership(userId: number, householdId: number): P
 /**
  * Get a template by ID
  */
-async function getTemplateById(templateId: number): Promise<AppResult<typeof templates.$inferSelect>> {
+async function getTemplateById(
+  templateId: number,
+): Promise<AppResult<typeof templates.$inferSelect>> {
   try {
     const template = await db.query.templates.findFirst({
       where: eq(templates.id, templateId),
@@ -121,7 +104,9 @@ async function getTemplateById(templateId: number): Promise<AppResult<typeof tem
 /**
  * Get a template task by ID
  */
-async function getTemplateTaskById(taskId: number): Promise<AppResult<typeof templateTasks.$inferSelect>> {
+async function getTemplateTaskById(
+  taskId: number,
+): Promise<AppResult<typeof templateTasks.$inferSelect>> {
   try {
     const task = await db.query.templateTasks.findFirst({
       where: eq(templateTasks.id, taskId),
@@ -140,13 +125,13 @@ async function getTemplateTaskById(taskId: number): Promise<AppResult<typeof tem
 /**
  * Verify a category belongs to a household
  */
-async function verifyCategoryInHousehold(categoryId: number, householdId: number): Promise<AppResult<typeof categories.$inferSelect>> {
+async function verifyCategoryInHousehold(
+  categoryId: number,
+  householdId: number,
+): Promise<AppResult<typeof categories.$inferSelect>> {
   try {
     const category = await db.query.categories.findFirst({
-      where: and(
-        eq(categories.id, categoryId),
-        eq(categories.householdId, householdId),
-      ),
+      where: and(eq(categories.id, categoryId), eq(categories.householdId, householdId)),
     });
 
     if (!category) {
@@ -162,7 +147,9 @@ async function verifyCategoryInHousehold(categoryId: number, householdId: number
 /**
  * Get templates for a household
  */
-async function getHouseholdTemplates(householdId: number): Promise<AppResult<typeof templates.$inferSelect[]>> {
+async function getHouseholdTemplates(
+  householdId: number,
+): Promise<AppResult<(typeof templates.$inferSelect)[]>> {
   try {
     const householdTemplates = await db
       .select()
@@ -178,7 +165,11 @@ async function getHouseholdTemplates(householdId: number): Promise<AppResult<typ
 /**
  * Create a new template
  */
-async function createTemplate(name: string, description: string | undefined, householdId: number): Promise<AppResult<typeof templates.$inferSelect>> {
+async function createTemplate(
+  name: string,
+  description: string | undefined,
+  householdId: number,
+): Promise<AppResult<typeof templates.$inferSelect>> {
   try {
     const [newTemplate] = await db
       .insert(templates)
@@ -188,6 +179,9 @@ async function createTemplate(name: string, description: string | undefined, hou
         householdId,
       })
       .returning();
+    if (newTemplate === undefined) {
+      return err(createDatabaseQueryError("Failed to create template"));
+    }
 
     return ok(newTemplate);
   } catch (error) {
@@ -198,7 +192,9 @@ async function createTemplate(name: string, description: string | undefined, hou
 /**
  * Get template tasks with category info
  */
-async function getTemplateTasks(templateId: number): Promise<AppResult<TemplateTaskWithCategory[]>> {
+async function getTemplateTasks(
+  templateId: number,
+): Promise<AppResult<TemplateTaskWithCategory[]>> {
   try {
     const tasks = await db
       .select({
@@ -214,16 +210,13 @@ async function getTemplateTasks(templateId: number): Promise<AppResult<TemplateT
         updatedAt: templateTasks.updatedAt,
       })
       .from(templateTasks)
-      .leftJoin(
-        categories,
-        eq(templateTasks.categoryId, categories.id),
-      )
+      .leftJoin(categories, eq(templateTasks.categoryId, categories.id))
       .where(eq(templateTasks.templateId, templateId));
 
     // Ensure categoryName is never null
-    const tasksWithNonNullCategoryName = tasks.map(task => ({
+    const tasksWithNonNullCategoryName = tasks.map((task) => ({
       ...task,
-      categoryName: task.categoryName || 'Uncategorized'
+      categoryName: task.categoryName || "Uncategorized",
     }));
 
     return ok(tasksWithNonNullCategoryName);
@@ -249,10 +242,7 @@ async function getTaskAssignments(taskIds: number[]): Promise<AppResult<TaskAssi
         lastName: users.lastName,
       })
       .from(templateTaskAssignments)
-      .innerJoin(
-        users,
-        eq(templateTaskAssignments.userId, users.id),
-      )
+      .innerJoin(users, eq(templateTaskAssignments.userId, users.id))
       .where(inArray(templateTaskAssignments.templateTaskId, taskIds));
 
     return ok(assignments);
@@ -264,7 +254,9 @@ async function getTaskAssignments(taskIds: number[]): Promise<AppResult<TaskAssi
 /**
  * Get household categories
  */
-async function getHouseholdCategories(householdId: number): Promise<AppResult<typeof categories.$inferSelect[]>> {
+async function getHouseholdCategories(
+  householdId: number,
+): Promise<AppResult<(typeof categories.$inferSelect)[]>> {
   try {
     const householdCategories = await db
       .select()
@@ -291,10 +283,7 @@ async function getHouseholdMembers(householdId: number): Promise<AppResult<House
       .from(users)
       .innerJoin(
         householdMembers,
-        and(
-          eq(householdMembers.userId, users.id),
-          eq(householdMembers.householdId, householdId),
-        ),
+        and(eq(householdMembers.userId, users.id), eq(householdMembers.householdId, householdId)),
       );
 
     return ok(householdMembersList);
@@ -313,7 +302,7 @@ async function createTemplateTask(
   description: string | undefined,
   timesPerMonth: number,
   storyPoints: number,
-  assignToAll: boolean
+  assignToAll: boolean,
 ): Promise<AppResult<typeof templateTasks.$inferSelect>> {
   try {
     const [newTask] = await db
@@ -329,6 +318,9 @@ async function createTemplateTask(
       })
       .returning();
 
+    if (newTask === undefined) {
+      return err(createDatabaseQueryError("Failed to create template task"));
+    }
     return ok(newTask);
   } catch (error) {
     return err(createDatabaseQueryError("Failed to create template task", error));
@@ -345,7 +337,7 @@ async function getHouseholdMemberIds(householdId: number): Promise<AppResult<num
       .from(householdMembers)
       .where(eq(householdMembers.householdId, householdId));
 
-    return ok(householdMemberIds.map(m => m.userId));
+    return ok(householdMemberIds.map((m) => m.userId));
   } catch (error) {
     return err(createDatabaseQueryError("Failed to fetch household member IDs", error));
   }
@@ -354,7 +346,10 @@ async function getHouseholdMemberIds(householdId: number): Promise<AppResult<num
 /**
  * Create task assignments
  */
-async function createTaskAssignments(taskId: number, userIds: number[]): Promise<AppResult<boolean>> {
+async function createTaskAssignments(
+  taskId: number,
+  userIds: number[],
+): Promise<AppResult<boolean>> {
   if (userIds.length === 0) {
     return ok(true);
   }
@@ -364,7 +359,7 @@ async function createTaskAssignments(taskId: number, userIds: number[]): Promise
       userIds.map((userId) => ({
         templateTaskId: taskId,
         userId,
-      }))
+      })),
     );
 
     return ok(true);
@@ -383,7 +378,7 @@ async function updateTemplateTask(
   categoryId: number,
   timesPerMonth: number,
   storyPoints: number,
-  assignToAll: boolean
+  assignToAll: boolean,
 ): Promise<AppResult<typeof templateTasks.$inferSelect>> {
   try {
     const [updatedTask] = await db
@@ -399,6 +394,9 @@ async function updateTemplateTask(
       })
       .where(eq(templateTasks.id, taskId))
       .returning();
+    if (updatedTask === undefined) {
+      return err(createDatabaseQueryError("Failed to update template task"));
+    }
 
     return ok(updatedTask);
   } catch (error) {
@@ -440,7 +438,10 @@ templateRoutes.get("/household/:householdId", async (c) => {
 
   if (Number.isNaN(householdId)) {
     const error = createInvalidInputError("Invalid household ID");
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
   }
 
   // Verify user is a member of this household
@@ -448,7 +449,10 @@ templateRoutes.get("/household/:householdId", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 403) as ContentfulStatusCode,
+    );
   }
 
   // Get templates for this household
@@ -456,39 +460,44 @@ templateRoutes.get("/household/:householdId", async (c) => {
 
   if (templatesResult.isErr()) {
     const error = templatesResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
   }
 
   return c.json({ templates: templatesResult.value });
 });
 
 // Create a new template
-templateRoutes.post(
-  "/",
-  zValidator("json", createTemplateSchema),
-  async (c) => {
-    const user = c.get("user");
-    const { name, description, householdId } = await c.req.valid("json");
+templateRoutes.post("/", zValidator("json", createTemplateSchema), async (c) => {
+  const user = c.get("user");
+  const { name, description, householdId } = await c.req.valid("json");
 
-    // Verify user is a member of this household
-    const membershipResult = await verifyHouseholdMembership(user.id, householdId);
+  // Verify user is a member of this household
+  const membershipResult = await verifyHouseholdMembership(user.id, householdId);
 
-    if (membershipResult.isErr()) {
-      const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
-    }
+  if (membershipResult.isErr()) {
+    const error = membershipResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 403) as ContentfulStatusCode,
+    );
+  }
 
-    // Create the template
-    const templateResult = await createTemplate(name, description, householdId);
+  // Create the template
+  const templateResult = await createTemplate(name, description ?? undefined, householdId);
 
-    if (templateResult.isErr()) {
-      const error = templateResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-    }
+  if (templateResult.isErr()) {
+    const error = templateResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
+  }
 
-    return c.json({ template: templateResult.value }, 201);
-  },
-);
+  return c.json({ template: templateResult.value }, 201);
+});
 
 // Get a specific template with its tasks
 templateRoutes.get("/:id", async (c) => {
@@ -497,7 +506,10 @@ templateRoutes.get("/:id", async (c) => {
 
   if (Number.isNaN(templateId)) {
     const error = createInvalidInputError("Invalid template ID");
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
   }
 
   // Get the template
@@ -505,7 +517,10 @@ templateRoutes.get("/:id", async (c) => {
 
   if (templateResult.isErr()) {
     const error = templateResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 404) as ContentfulStatusCode,
+    );
   }
 
   const template = templateResult.value;
@@ -515,7 +530,10 @@ templateRoutes.get("/:id", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 403) as ContentfulStatusCode,
+    );
   }
 
   // Get template tasks
@@ -523,7 +541,10 @@ templateRoutes.get("/:id", async (c) => {
 
   if (tasksResult.isErr()) {
     const error = tasksResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
   }
 
   const tasks = tasksResult.value;
@@ -535,23 +556,30 @@ templateRoutes.get("/:id", async (c) => {
 
   if (assignmentsResult.isErr()) {
     const error = assignmentsResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
   }
 
   const assignments = assignmentsResult.value;
 
   // Group assignments by task
-  const assignmentsByTask = assignments.reduce((acc, curr) => {
-    if (!acc[curr.taskId]) {
-      acc[curr.taskId] = [];
-    }
-    acc[curr.taskId].push({
-      userId: curr.userId,
-      firstName: curr.firstName,
-      lastName: curr.lastName,
-    });
-    return acc;
-  }, {} as Record<number, { userId: number; firstName: string; lastName: string }[]>);
+  const assignmentsByTask = assignments.reduce(
+    (acc, curr) => {
+      if (!acc[curr.taskId]) {
+        acc[curr.taskId] = [];
+      }
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
+      acc[curr.taskId]!.push({
+        userId: curr.userId,
+        firstName: curr.firstName,
+        lastName: curr.lastName,
+      });
+      return acc;
+    },
+    {} as Record<number, { userId: number; firstName: string; lastName: string }[]>,
+  );
 
   // Add assignments to tasks
   const tasksWithAssignments = tasks.map((task) => ({
@@ -564,7 +592,10 @@ templateRoutes.get("/:id", async (c) => {
 
   if (categoriesResult.isErr()) {
     const error = categoriesResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
   }
 
   // Get household members for reference
@@ -572,7 +603,10 @@ templateRoutes.get("/:id", async (c) => {
 
   if (membersResult.isErr()) {
     const error = membersResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
   }
 
   return c.json({
@@ -584,252 +618,36 @@ templateRoutes.get("/:id", async (c) => {
 });
 
 // Add a task to a template
-templateRoutes.post(
-  "/:id/tasks",
-  zValidator("json", createTemplateTaskSchema),
-  async (c) => {
-    const user = c.get("user");
-    const templateId = Number.parseInt(c.req.param("id"));
-    const {
-      name,
-      description,
-      categoryId,
-      timesPerMonth,
-      storyPoints,
-      assignToAll,
-      assignedUserIds = [],
-    } = await c.req.valid("json");
-
-    if (Number.isNaN(templateId)) {
-      const error = createInvalidInputError("Invalid template ID");
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
-    }
-
-    // Get the template
-    const templateResult = await getTemplateById(templateId);
-
-    if (templateResult.isErr()) {
-      const error = templateResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
-    }
-
-    const template = templateResult.value;
-
-    // Verify user is a member of this household
-    const membershipResult = await verifyHouseholdMembership(user.id, template.householdId);
-
-    if (membershipResult.isErr()) {
-      const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
-    }
-
-    // Verify the category belongs to this household
-    const categoryResult = await verifyCategoryInHousehold(categoryId, template.householdId);
-
-    if (categoryResult.isErr()) {
-      const error = categoryResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
-    }
-
-    const category = categoryResult.value;
-
-    // Create the template task
-    const taskResult = await createTemplateTask(
-      templateId,
-      categoryId,
-      name,
-      description,
-      timesPerMonth,
-      storyPoints,
-      assignToAll
-    );
-
-    if (taskResult.isErr()) {
-      const error = taskResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-    }
-
-    const newTask = taskResult.value;
-
-    // If not assigned to all, create assignments for specific users
-    if (!assignToAll && assignedUserIds.length > 0) {
-      // Verify all users are household members
-      const memberIdsResult = await getHouseholdMemberIds(template.householdId);
-
-      if (memberIdsResult.isErr()) {
-        const error = memberIdsResult.error;
-        return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-      }
-
-      const validMemberIds = new Set(memberIdsResult.value);
-      const validAssignees = assignedUserIds.filter((id) => validMemberIds.has(id));
-
-      // Create assignments
-      if (validAssignees.length > 0) {
-        const assignmentsResult = await createTaskAssignments(newTask.id, validAssignees);
-
-        if (assignmentsResult.isErr()) {
-          const error = assignmentsResult.error;
-          return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-        }
-      }
-    }
-
-    // Get category info for the response
-    const taskWithCategory = {
-      ...newTask,
-      categoryName: category.name,
-    };
-
-    return c.json({ task: taskWithCategory }, 201);
-  },
-);
-
-// Update a template task
-templateRoutes.put(
-  "/tasks/:taskId",
-  zValidator("json", createTemplateTaskSchema),
-  async (c) => {
-    const user = c.get("user");
-    const taskId = Number.parseInt(c.req.param("taskId"));
-    const {
-      name,
-      description,
-      categoryId,
-      timesPerMonth,
-      storyPoints,
-      assignToAll,
-      assignedUserIds = [],
-    } = await c.req.valid("json");
-
-    if (Number.isNaN(taskId)) {
-      const error = createInvalidInputError("Invalid task ID");
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
-    }
-
-    // Get the task
-    const taskResult = await getTemplateTaskById(taskId);
-
-    if (taskResult.isErr()) {
-      const error = taskResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
-    }
-
-    const task = taskResult.value;
-
-    // Get the template
-    const templateResult = await getTemplateById(task.templateId);
-
-    if (templateResult.isErr()) {
-      const error = templateResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
-    }
-
-    const template = templateResult.value;
-
-    // Verify user is a member of this household
-    const membershipResult = await verifyHouseholdMembership(user.id, template.householdId);
-
-    if (membershipResult.isErr()) {
-      const error = membershipResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
-    }
-
-    // Verify the category belongs to this household
-    const categoryResult = await verifyCategoryInHousehold(categoryId, template.householdId);
-
-    if (categoryResult.isErr()) {
-      const error = categoryResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
-    }
-
-    const category = categoryResult.value;
-
-    // Update the task
-    const updateResult = await updateTemplateTask(
-      taskId,
-      name,
-      description,
-      categoryId,
-      timesPerMonth,
-      storyPoints,
-      assignToAll
-    );
-
-    if (updateResult.isErr()) {
-      const error = updateResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-    }
-
-    const updatedTask = updateResult.value;
-
-    // Delete existing assignments
-    const deleteResult = await deleteTaskAssignments(taskId);
-
-    if (deleteResult.isErr()) {
-      const error = deleteResult.error;
-      return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-    }
-
-    // If not assigned to all, create new assignments for specific users
-    if (!assignToAll && assignedUserIds.length > 0) {
-      // Verify all users are household members
-      const memberIdsResult = await getHouseholdMemberIds(template.householdId);
-
-      if (memberIdsResult.isErr()) {
-        const error = memberIdsResult.error;
-        return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-      }
-
-      const validMemberIds = new Set(memberIdsResult.value);
-      const validAssignees = assignedUserIds.filter((id) => validMemberIds.has(id));
-
-      // Create assignments
-      if (validAssignees.length > 0) {
-        const assignmentsResult = await createTaskAssignments(updatedTask.id, validAssignees);
-
-        if (assignmentsResult.isErr()) {
-          const error = assignmentsResult.error;
-          return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
-        }
-      }
-    }
-
-    return c.json({
-      task: {
-        ...updatedTask,
-        categoryName: category.name,
-      },
-    });
-  },
-);
-
-// Delete a template task
-templateRoutes.delete("/tasks/:taskId", async (c) => {
+templateRoutes.post("/:id/tasks", zValidator("json", createTemplateTaskSchema), async (c) => {
   const user = c.get("user");
-  const taskId = Number.parseInt(c.req.param("taskId"));
+  const templateId = Number.parseInt(c.req.param("id"));
+  const {
+    name,
+    description,
+    categoryId,
+    timesPerMonth,
+    storyPoints,
+    assignToAll,
+    assignedUserIds = [],
+  } = await c.req.valid("json");
 
-  if (Number.isNaN(taskId)) {
-    const error = createInvalidInputError("Invalid task ID");
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 400) as ContentfulStatusCode);
+  if (Number.isNaN(templateId)) {
+    const error = createInvalidInputError("Invalid template ID");
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
   }
-
-  // Get the task
-  const taskResult = await getTemplateTaskById(taskId);
-
-  if (taskResult.isErr()) {
-    const error = taskResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
-  }
-
-  const task = taskResult.value;
 
   // Get the template
-  const templateResult = await getTemplateById(task.templateId);
+  const templateResult = await getTemplateById(templateId);
 
   if (templateResult.isErr()) {
     const error = templateResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 404) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 404) as ContentfulStatusCode,
+    );
   }
 
   const template = templateResult.value;
@@ -839,7 +657,275 @@ templateRoutes.delete("/tasks/:taskId", async (c) => {
 
   if (membershipResult.isErr()) {
     const error = membershipResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 403) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 403) as ContentfulStatusCode,
+    );
+  }
+
+  // Verify the category belongs to this household
+  const categoryResult = await verifyCategoryInHousehold(categoryId, template.householdId);
+
+  if (categoryResult.isErr()) {
+    const error = categoryResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
+  }
+
+  const category = categoryResult.value;
+
+  // Create the template task
+  const taskResult = await createTemplateTask(
+    templateId,
+    categoryId,
+    name,
+    description,
+    timesPerMonth,
+    storyPoints,
+    assignToAll,
+  );
+
+  if (taskResult.isErr()) {
+    const error = taskResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
+  }
+
+  const newTask = taskResult.value;
+
+  // If not assigned to all, create assignments for specific users
+  if (!assignToAll && assignedUserIds.length > 0) {
+    // Verify all users are household members
+    const memberIdsResult = await getHouseholdMemberIds(template.householdId);
+
+    if (memberIdsResult.isErr()) {
+      const error = memberIdsResult.error;
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 500) as ContentfulStatusCode,
+      );
+    }
+
+    const validMemberIds = new Set(memberIdsResult.value);
+    const validAssignees = assignedUserIds.filter((id) => validMemberIds.has(id));
+
+    // Create assignments
+    if (validAssignees.length > 0) {
+      const assignmentsResult = await createTaskAssignments(newTask.id, validAssignees);
+
+      if (assignmentsResult.isErr()) {
+        const error = assignmentsResult.error;
+        return c.json(
+          { message: error.message, type: error.type },
+          (error.statusCode || 500) as ContentfulStatusCode,
+        );
+      }
+    }
+  }
+
+  // Get category info for the response
+  const taskWithCategory = {
+    ...newTask,
+    categoryName: category.name,
+  };
+
+  return c.json({ task: taskWithCategory }, 201);
+});
+
+// Update a template task
+templateRoutes.put("/tasks/:taskId", zValidator("json", createTemplateTaskSchema), async (c) => {
+  const user = c.get("user");
+  const taskId = Number.parseInt(c.req.param("taskId"));
+  const {
+    name,
+    description,
+    categoryId,
+    timesPerMonth,
+    storyPoints,
+    assignToAll,
+    assignedUserIds = [],
+  } = await c.req.valid("json");
+
+  if (Number.isNaN(taskId)) {
+    const error = createInvalidInputError("Invalid task ID");
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
+  }
+
+  // Get the task
+  const taskResult = await getTemplateTaskById(taskId);
+
+  if (taskResult.isErr()) {
+    const error = taskResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 404) as ContentfulStatusCode,
+    );
+  }
+
+  const task = taskResult.value;
+
+  // Get the template
+  const templateResult = await getTemplateById(task.templateId);
+
+  if (templateResult.isErr()) {
+    const error = templateResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 404) as ContentfulStatusCode,
+    );
+  }
+
+  const template = templateResult.value;
+
+  // Verify user is a member of this household
+  const membershipResult = await verifyHouseholdMembership(user.id, template.householdId);
+
+  if (membershipResult.isErr()) {
+    const error = membershipResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 403) as ContentfulStatusCode,
+    );
+  }
+
+  // Verify the category belongs to this household
+  const categoryResult = await verifyCategoryInHousehold(categoryId, template.householdId);
+
+  if (categoryResult.isErr()) {
+    const error = categoryResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
+  }
+
+  const category = categoryResult.value;
+
+  // Update the task
+  const updateResult = await updateTemplateTask(
+    taskId,
+    name,
+    description,
+    categoryId,
+    timesPerMonth,
+    storyPoints,
+    assignToAll,
+  );
+
+  if (updateResult.isErr()) {
+    const error = updateResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
+  }
+
+  const updatedTask = updateResult.value;
+
+  // Delete existing assignments
+  const deleteResult = await deleteTaskAssignments(taskId);
+
+  if (deleteResult.isErr()) {
+    const error = deleteResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
+  }
+
+  // If not assigned to all, create new assignments for specific users
+  if (!assignToAll && assignedUserIds.length > 0) {
+    // Verify all users are household members
+    const memberIdsResult = await getHouseholdMemberIds(template.householdId);
+
+    if (memberIdsResult.isErr()) {
+      const error = memberIdsResult.error;
+      return c.json(
+        { message: error.message, type: error.type },
+        (error.statusCode || 500) as ContentfulStatusCode,
+      );
+    }
+
+    const validMemberIds = new Set(memberIdsResult.value);
+    const validAssignees = assignedUserIds.filter((id) => validMemberIds.has(id));
+
+    // Create assignments
+    if (validAssignees.length > 0) {
+      const assignmentsResult = await createTaskAssignments(updatedTask.id, validAssignees);
+
+      if (assignmentsResult.isErr()) {
+        const error = assignmentsResult.error;
+        return c.json(
+          { message: error.message, type: error.type },
+          (error.statusCode || 500) as ContentfulStatusCode,
+        );
+      }
+    }
+  }
+
+  return c.json({
+    task: {
+      ...updatedTask,
+      categoryName: category.name,
+    },
+  });
+});
+
+// Delete a template task
+templateRoutes.delete("/tasks/:taskId", async (c) => {
+  const user = c.get("user");
+  const taskId = Number.parseInt(c.req.param("taskId"));
+
+  if (Number.isNaN(taskId)) {
+    const error = createInvalidInputError("Invalid task ID");
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 400) as ContentfulStatusCode,
+    );
+  }
+
+  // Get the task
+  const taskResult = await getTemplateTaskById(taskId);
+
+  if (taskResult.isErr()) {
+    const error = taskResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 404) as ContentfulStatusCode,
+    );
+  }
+
+  const task = taskResult.value;
+
+  // Get the template
+  const templateResult = await getTemplateById(task.templateId);
+
+  if (templateResult.isErr()) {
+    const error = templateResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 404) as ContentfulStatusCode,
+    );
+  }
+
+  const template = templateResult.value;
+
+  // Verify user is a member of this household
+  const membershipResult = await verifyHouseholdMembership(user.id, template.householdId);
+
+  if (membershipResult.isErr()) {
+    const error = membershipResult.error;
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 403) as ContentfulStatusCode,
+    );
   }
 
   // Delete the task (assignments will cascade)
@@ -847,7 +933,10 @@ templateRoutes.delete("/tasks/:taskId", async (c) => {
 
   if (deleteResult.isErr()) {
     const error = deleteResult.error;
-    return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+    return c.json(
+      { message: error.message, type: error.type },
+      (error.statusCode || 500) as ContentfulStatusCode,
+    );
   }
 
   return c.json({ message: "Task deleted successfully" });

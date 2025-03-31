@@ -5,12 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
-
-// Login form validation schema
-const loginSchema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  password: z.string().min(1, 'Password is required'),
-});
+import { loginSchema } from '@shared/schemas';
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 

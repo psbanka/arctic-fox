@@ -25,6 +25,9 @@ async function seedDatabase() {
         name: "Doe Family",
       })
       .returning();
+    if (doeHousehold === undefined) {
+      throw new Error("Failed to create household");
+    }
 
     // Create admin user
     const adminPasswordHash = await hash("admin123", 10);
@@ -66,6 +69,9 @@ async function seedDatabase() {
         isAdmin: false,
       })
       .returning();
+    if (user2 === undefined || user1 === undefined || adminUser === undefined) {
+      throw new Error("Failed to create users");
+    }
 
     // Add users to household
     await db.insert(householdMembers).values([
@@ -110,7 +116,10 @@ async function seedDatabase() {
       },
     ];
 
-    const createdCategories = await db.insert(categories).values(categoriesData).returning();
+    const [category1, category2, category3 ] = await db.insert(categories).values(categoriesData).returning();
+    if (category1 === undefined || category2 === undefined || category3 === undefined) {
+      throw new Error("Failed to create categories");
+    }
 
     // Create a template
     const [monthlyTemplate] = await db
@@ -121,12 +130,15 @@ async function seedDatabase() {
         description: "Our standard monthly plan template",
       })
       .returning();
+    if (monthlyTemplate === undefined) {
+      throw new Error("Failed to create template");
+    }
 
     // Create template tasks
     const templateTasksData = [
       {
         templateId: monthlyTemplate.id,
-        categoryId: createdCategories[0].id, // Health
+        categoryId: category1.id, // Health
         name: "Exercise",
         description: "Go to the gym or workout at home",
         timesPerMonth: 12,
@@ -135,7 +147,7 @@ async function seedDatabase() {
       },
       {
         templateId: monthlyTemplate.id,
-        categoryId: createdCategories[0].id, // Health
+        categoryId: category1.id, // Health
         name: "Meditation",
         description: "10 minutes of meditation",
         timesPerMonth: 15,
@@ -144,7 +156,7 @@ async function seedDatabase() {
       },
       {
         templateId: monthlyTemplate.id,
-        categoryId: createdCategories[1].id, // Family
+        categoryId: category2.id, // Family
         name: "Family dinner",
         description: "Prepare and have dinner together as a family",
         timesPerMonth: 8,
@@ -153,7 +165,7 @@ async function seedDatabase() {
       },
       {
         templateId: monthlyTemplate.id,
-        categoryId: createdCategories[1].id, // Family
+        categoryId: category2.id, // Family
         name: "Visit parents",
         description: "Visit parents or in-laws",
         timesPerMonth: 2,
@@ -162,7 +174,7 @@ async function seedDatabase() {
       },
       {
         templateId: monthlyTemplate.id,
-        categoryId: createdCategories[2].id, // Community
+        categoryId: category3.id, // Community
         name: "Volunteer",
         description: "Volunteer at local charity or community event",
         timesPerMonth: 1,
@@ -171,7 +183,7 @@ async function seedDatabase() {
       },
       {
         templateId: monthlyTemplate.id,
-        categoryId: createdCategories[3].id, // Home
+        categoryId: category3.id, // Home
         name: "Deep cleaning",
         description: "Deep cleaning of a room or area",
         timesPerMonth: 4,
@@ -184,17 +196,22 @@ async function seedDatabase() {
       .insert(templateTasks)
       .values(templateTasksData)
       .returning();
+    if (createdTemplateTasks.length < 5) {
+      throw new Error("Failed to create template tasks");
+    }
 
     // Assign specific tasks to specific users
     // Visiting parents assigned to John
     await db.insert(templateTaskAssignments).values({
-      templateTaskId: createdTemplateTasks[3].id, // Visit parents
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
+      templateTaskId: createdTemplateTasks[3]!.id, // Visit parents
       userId: user1.id,
     });
 
     // Volunteering assigned to Jane
     await db.insert(templateTaskAssignments).values({
-      templateTaskId: createdTemplateTasks[4].id, // Volunteer
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
+      templateTaskId: createdTemplateTasks[4]!.id, // Volunteer
       userId: user2.id,
     });
 

@@ -107,10 +107,13 @@ const MonthlyPlansPage: FC = () => {
       if (!acc[plan.year]) {
         acc[plan.year] = {};
       }
-      if (!acc[plan.year][plan.month]) {
-        acc[plan.year][plan.month] = [];
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
+      if (!acc[plan.year]![plan.month]) {
+        // biome-ignore lint/style/noNonNullAssertion: <explanation>
+        acc[plan.year]![plan.month] = [];
       }
-      acc[plan.year][plan.month].push(plan);
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
+      acc[plan.year]![plan.month]!.push(plan);
       return acc;
     }, {}) : {};
 
@@ -172,7 +175,8 @@ const MonthlyPlansPage: FC = () => {
               <div key={year} className="border rounded-lg p-4">
                 <h2 className="text-xl font-semibold mb-4">{year}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {Object.entries(groupedPlans[year]).sort((a, b) => Number.parseInt(b[0], 10) - Number.parseInt(a[0], 10)).map(([month, plans]) => (
+                  {/* biome-ignore lint/style/noNonNullAssertion: <explanation> */}
+                  {Object.entries(groupedPlans[year]!).sort((a, b) => Number.parseInt(b[0], 10) - Number.parseInt(a[0], 10)).map(([month, plans]) => (
                     <div key={`${year}-${month}`} className="border rounded-lg p-4">
                       <h3 className="text-lg font-medium mb-3">
                         {format(new Date(year, Number.parseInt(month, 10) - 1), 'MMMM')}

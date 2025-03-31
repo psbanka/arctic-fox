@@ -1,5 +1,5 @@
-import { Context } from "hono";
-import { verifyToken, JwtUser } from "../utils/auth";
+import type { Context } from "hono";
+import { verifyToken, type JwtUser } from "../utils/auth";
 import { createInsufficientPermissionsError } from "../utils/result";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 

@@ -1,31 +1,19 @@
-import React, { useState } from 'react';
+import { type FC, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { toast } from 'react-hot-toast';
 import { PlusCircle, UserPlus } from 'lucide-react';
 import api from '../../services/api';
-import { User } from '@shared/types';
+import type { User } from '@shared/types';
 import Button from '../../components/ui/Button';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-
-// Create user form validation schema
-const createUserSchema = z.object({
-  username: z
-    .string()
-    .min(3, 'Username must be at least 3 characters')
-    .max(50, 'Username must be at most 50 characters')
-    .regex(/^[a-zA-Z0-9._-]+$/, 'Username can only contain letters, numbers, and ._-'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
-  isAdmin: z.boolean().default(false),
-});
+import { createUserSchema } from '@shared/schemas';
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
 
-const AdminPage: React.FC = () => {
+const AdminPage: FC = () => {
   const queryClient = useQueryClient();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 

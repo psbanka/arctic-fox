@@ -6,7 +6,7 @@ import {
   createAuthenticationError,
   createTokenExpiredError,
   createUnexpectedError,
-  AppResult,
+  type AppResult,
   ok,
   err
 } from './result';

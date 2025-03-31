@@ -111,7 +111,8 @@ const MonthlyPlanDetailPage: FC = () => {
       if (!acc[task.categoryId]) {
         acc[task.categoryId] = [];
       }
-      acc[task.categoryId].push(task);
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
+      acc[task.categoryId]!.push(task);
       return acc;
     }, {});
 

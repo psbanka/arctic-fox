@@ -2,7 +2,6 @@
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
 import { db } from "../db";
 import {
   monthlyPlans,
@@ -22,44 +21,15 @@ import {
   createRecordNotFoundError,
   createInvalidInputError,
 } from "../utils/result";
-import type { Task, Category, MonthlyPlanDetail, PlanStats } from "@shared/types";
+import type { Task, Category, PlanStats } from "@shared/types";
 import { verifyHouseholdMembership } from "../utils/household";
 import { mapMonthlyPlanModelToMonthlyPlan } from "../db/types";
+import { createMonthlyPlanSchema, completeTaskSchema, createTaskSchema, taskSchema } from "@shared/schemas";
 
 const monthlyPlanRoutes = new Hono();
 
 // Apply authentication to all routes
 monthlyPlanRoutes.use("*", authenticate);
-
-// Create a monthly plan schema
-const createMonthlyPlanSchema = z.object({
-  householdId: z.number().int().positive(),
-  month: z.number().int().min(1).max(12),
-  year: z.number().int().min(2000).max(3000),
-  name: z.string().min(1, "Plan name is required"),
-  templateId: z.number().int().positive().optional(),
-});
-
-// Create a task schema
-const createTaskSchema = z.object({
-  monthlyPlanId: z.number().int().positive(),
-  categoryId: z.number().int().positive(),
-  name: z.string().min(1, "Task name is required"),
-  description: z.string().optional(),
-  storyPoints: z.number().int().positive().refine((val) => {
-    // Fibonacci sequence check (1, 2, 3, 5, 8, 13, 21, etc.)
-    const fibNumbers = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
-    return fibNumbers.includes(val);
-  }, "Story points must be a Fibonacci number (1, 2, 3, 5, 8, 13, 21, etc.)"),
-  isTemplateTask: z.boolean().default(false),
-  assignedUserIds: z.array(z.number().int().positive()),
-  dueDate: z.string().optional(),
-});
-
-// Complete task schema
-const completeTaskSchema = z.object({
-  isCompleted: z.boolean(),
-});
 
 // Define interfaces for the return types to replace 'any'
 interface TemplateTaskWithAssignments {
@@ -181,6 +151,9 @@ async function createMonthlyPlan(
       })
       .returning();
 
+    if (newPlan === undefined) {
+      return err(createDatabaseQueryError("Failed to create monthly plan"));
+    }
     return ok(newPlan);
   } catch (error) {
     return err(createDatabaseQueryError("Failed to create monthly plan", error));
@@ -278,7 +251,8 @@ async function getTemplateTasksWithAssignments(templateId: number): Promise<AppR
       if (!acc[curr.taskId]) {
         acc[curr.taskId] = [];
       }
-      acc[curr.taskId].push(curr.userId);
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
+      acc[curr.taskId]!.push(curr.userId);
       return acc;
     }, {} as Record<number, number[]>);
 
@@ -332,6 +306,9 @@ async function createTaskFromTemplate(
         isTemplateTask: true,
       })
       .returning();
+    if (newTask === undefined) {
+      return err(createDatabaseQueryError("Failed to create task from template"));
+    }
 
     return ok(newTask);
   } catch (error) {
@@ -476,7 +453,8 @@ async function getTaskWithCategoryNameAndAssignments(taskId: number): Promise<Ap
       if (!acc[curr.taskId]) {
         acc[curr.taskId] = [];
       }
-      acc[curr.taskId].push({
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
+      acc[curr.taskId]!.push({
         userId: curr.userId,
         firstName: curr.firstName,
         lastName: curr.lastName,
@@ -501,7 +479,10 @@ async function getTaskWithCategoryNameAndAssignments(taskId: number): Promise<Ap
   }
 }
 
-// Get monthly plans for a household
+// ------------------------------------------------------------------
+// Here are the endpoint handlers
+// ------------------------------------------------------------------
+
 monthlyPlanRoutes.get("/household/:householdId", async (c) => {
   const user = c.get("user");
   const householdId = Number.parseInt(c.req.param("householdId"));
@@ -805,6 +786,9 @@ async function updateTaskCompletionStatus(
       })
       .where(eq(tasks.id, taskId))
       .returning();
+    if (updatedTask === undefined) {
+      return err(createDatabaseQueryError("Failed to update task completion status"));
+    }
 
     return ok(updatedTask);
   } catch (error) {
@@ -884,11 +868,18 @@ monthlyPlanRoutes.patch(
   }
 );
 
+
+// Define a custom response type that includes the JSON payload type.
+interface TypedResponse<T> extends Response {
+  // Optionally, add a helper method that returns the parsed JSON with type T.
+  json: () => Promise<T>;
+}
+
 // Add a new task to a plan
 monthlyPlanRoutes.post(
   "/:id/tasks",
   zValidator("json", createTaskSchema),
-  async (c) => {
+  async (c): Promise<TypedResponse<Task>> => {
     const user = c.get("user");
     const planId = Number.parseInt(c.req.param("id"));
     const {
@@ -943,6 +934,9 @@ monthlyPlanRoutes.post(
           dueDate: dueDate ? new Date(dueDate) : null,
         })
         .returning();
+      if (newTask === undefined) {
+        return c.json({ message: "Failed to create task" }, (500) as ContentfulStatusCode);
+      }
 
       // Create assignments
       if (assignedUserIds && assignedUserIds.length > 0) {
@@ -954,7 +948,19 @@ monthlyPlanRoutes.post(
         }
       }
 
-      return c.json({ task: newTask }, (201 as ContentfulStatusCode));
+      // Get the complete task data with category name and assignments
+      const taskResult = await getTaskWithCategoryNameAndAssignments(newTask.id);
+
+      if (taskResult.isErr()) {
+        const error = taskResult.error;
+        return c.json({ message: error.message, type: error.type }, (error.statusCode || 500) as ContentfulStatusCode);
+      }
+
+      const { monthlyPlanId, ...task } = taskResult.value;
+
+      // Type assertion to ensure the response matches the expected type
+      const response = { task, cheese: "yummy" };
+      return c.json(response, (201 as ContentfulStatusCode));
     } catch (error) {
       const dbError = createDatabaseQueryError("Failed to create task", error);
       return c.json({ message: dbError.message, type: dbError.type }, (dbError.statusCode || 500) as ContentfulStatusCode);

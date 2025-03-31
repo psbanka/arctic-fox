@@ -22,30 +22,7 @@ import type {
   TemplateTask,
   Category
 } from '@shared/types';
-
-// Form validation schema for creating a task
-const createTaskSchema = z.object({
-  name: z
-    .string()
-    .min(3, 'Name must be at least 3 characters')
-    .max(100, 'Name must be less than 100 characters'),
-  description: z
-    .string()
-    .max(500, 'Description must be less than 500 characters')
-    .nullable()
-    .optional(),
-  categoryId: z.number().positive('Please select a category'),
-  timesPerMonth: z
-    .number()
-    .min(1, 'Times per month must be at least 1')
-    .max(31, 'Times per month cannot exceed 31'),
-  storyPoints: z
-    .number()
-    .min(1, 'Story points must be at least 1')
-    .max(100, 'Story points cannot exceed 100'),
-  assignToAll: z.boolean(),
-  assignedUserIds: z.array(z.number()).optional(),
-});
+import { createTaskSchema } from '@shared/schemas';
 
 type CreateTaskFormData = z.infer<typeof createTaskSchema>;
 

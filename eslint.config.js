@@ -1,7 +1,6 @@
 // @ts-check
 
 import js from "@eslint/js";
-import importPlugin from "eslint-plugin-import";
 import reactPlugin from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
@@ -40,7 +39,6 @@ export default tseslint.config(
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
       "@typescript-eslint": tseslint.plugin,
-      import: importPlugin,
     },
     settings: {
       react: {

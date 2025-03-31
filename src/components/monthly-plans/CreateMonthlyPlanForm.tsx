@@ -6,18 +6,7 @@ import { format } from 'date-fns';
 import type { Template } from '@shared/types';
 import Button from '../ui/Button';
 import LoadingSpinner from '../ui/LoadingSpinner';
-
-// Form validation schema for creating a monthly plan
-const createMonthlyPlanSchema = z.object({
-  name: z
-    .string()
-    .min(3, 'Name must be at least 3 characters')
-    .max(100, 'Name must be less than 100 characters'),
-  month: z.number().min(1).max(12),
-  year: z.number().min(2000).max(2100),
-  householdId: z.number().positive('Please select a household'),
-  templateId: z.number().positive('Please select a template'),
-});
+import { createMonthlyPlanSchema } from '@shared/schemas';
 
 export type CreateMonthlyPlanFormData = z.infer<typeof createMonthlyPlanSchema>;
 
